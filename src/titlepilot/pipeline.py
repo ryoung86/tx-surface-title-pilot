@@ -1,5 +1,6 @@
 """Run one tract folder end to end."""
 import json
+import time
 from pathlib import Path
 
 from .chain import build_chain
@@ -31,16 +32,17 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
     work = Path(out_dir) / intake.tract_id / f"run_{run_id}"
 
     instruments = []
-    for doc in intake.documents:
+    docs = [d for d in intake.documents if (folder / d.file_name).exists()]
+    log(f"  Reading {len(docs)} documents (run {run_id})...")
+    for n, doc in enumerate(docs, 1):
         path = folder / doc.file_name
-        if not path.exists():
-            continue
+        started = time.monotonic()
         try:
             pages = to_pages(path, work / "pages" / path.stem)
             record = extractor.extract(path, pages)
         except Exception as e:  # one bad document should not stop the tract
             db.event(run_id, "extraction_failed", f"{doc.file_name}: {e}")
-            log(f"  FAILED: {doc.file_name}: {e}")
+            log(f"  [{n}/{len(docs)}] {doc.file_name}: FAILED: {e}")
             continue
         errors = schema_errors(record, cfg.schema)
         norm = normalize(record, doc)
@@ -48,6 +50,13 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
         if errors:
             db.event(run_id, "schema_errors", f"{doc.file_name}: {len(errors)}")
         instruments.append(norm)
+        notes = []
+        if record.get("_meta", {}).get("repaired"):
+            notes.append("needed a correction round")
+        if errors:
+            notes.append(f"{len(errors)} schema problems")
+        log(f"  [{n}/{len(docs)}] {doc.file_name}: {norm['type'] or 'unknown type'}, "
+            f"{len(pages)} page(s), {time.monotonic() - started:.0f}s" + (f" ({'; '.join(notes)})" if notes else ""))
 
     chain = build_chain(instruments)
     db.add_output(run_id, "chain", chain)

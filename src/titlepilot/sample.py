@@ -4,6 +4,7 @@ Every name, recording number and date here is invented.
 """
 import csv
 import json
+import textwrap
 from pathlib import Path
 
 import openpyxl
@@ -81,6 +82,11 @@ def _pdf(path, rec):
              "Grantor: " + ", ".join(p["name"] for p in rec["grantors"]["value"]),
              "Grantee: " + ", ".join(p["name"] for p in rec["grantees"]["value"]),
              f"Property: {LEGAL}"]
+    # Details the live run should find on the page, matching the answer key.
+    for ref in rec["refers_to"]["value"]:
+        lines.append(f"This instrument releases the lien recorded at {ref}.")
+    if rec["mineral_exception"]["value"]:
+        lines += ["", "Exception:"] + textwrap.wrap(rec["mineral_exception"]["value"], 70)
     img = Image.new("RGB", (1700, 2200), "white")
     try:
         font = ImageFont.load_default(size=32)

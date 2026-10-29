@@ -50,8 +50,27 @@ def norm_date(s):
     return None
 
 
+_YEAR_NUMBER = re.compile(r"(?<!\d)((?:18|19|20)\d{2})\s*[-/]\s*0*(\d{1,9})(?!\d)")
+_VOL_PAGE = re.compile(r"\bvol(?:ume)?\.?\s*0*(\d+)\D{0,12}?\bp(?:age|g)?s?\.?\s*0*(\d+)", re.I)
+
+
 def norm_ref(s) -> str:
-    return re.sub(r"[^A-Z0-9]", "", str(s).upper()) if s else ""
+    """Matching key for a recording reference, ignoring county names and formatting.
+
+    'Sample County, Texas OPR 2001-004410', 'OPR 2001-4410' and '2001-004410' -> '2001-4410'
+    'Vol. 412, p. 88' and 'Volume 412 Page 088'                               -> 'V412P88'
+    Anything else falls back to letters and digits only.
+    """
+    if not s:
+        return ""
+    s = str(s)
+    m = _YEAR_NUMBER.search(s)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    m = _VOL_PAGE.search(s)
+    if m:
+        return f"V{m.group(1)}P{m.group(2)}"
+    return re.sub(r"[^A-Z0-9]", "", s.upper())
 
 
 def norm_type(s) -> str:

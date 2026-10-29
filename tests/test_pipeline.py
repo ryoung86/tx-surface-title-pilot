@@ -104,3 +104,27 @@ def test_parse_json_tolerates_fences_and_text():
     assert parse_json('Here it is:\n```json\n{"a": 1}\n```') == {"a": 1}
     with pytest.raises(ExtractionError):
         parse_json("no json here")
+
+
+@pytest.mark.parametrize("raw,key", [
+    ("Sample County, Texas OPR 2001-004410", "2001-4410"),
+    ("OPR 2001-4410", "2001-4410"),
+    ("2001-004410", "2001-4410"),
+    ("Vol. 412, p. 88", "V412P88"),
+    ("Volume 412 Page 088", "V412P88"),
+    ("CABINET A SLIDE 12", "CABINETASLIDE12"),
+])
+def test_recording_reference_keys(raw, key):
+    from titlepilot.validate import norm_ref
+    assert norm_ref(raw) == key
+
+
+def test_sample_pdfs_show_release_reference_and_exception(sample):
+    import pypdfium2 as pdfium
+    # The fake PDFs are images, so check the mock data that drew them instead of OCR.
+    import json
+    rel = json.loads((sample / TRACT / "SAMPLE_2004-002210.pdf.mock.json").read_text())
+    deed = json.loads((sample / TRACT / "SAMPLE_1994-003300.pdf.mock.json").read_text())
+    assert rel["refers_to"]["value"] == ["OPR 1980-000123"]
+    assert "SAVE AND EXCEPT" in deed["mineral_exception"]["value"]
+    assert len(pdfium.PdfDocument(str(sample / TRACT / "SAMPLE_1994-003300.pdf"))) == 1
