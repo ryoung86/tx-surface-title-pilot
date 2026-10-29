@@ -18,6 +18,7 @@ The API key is only needed for live runs. Mock mode and the tests run without it
 
 ```bash
 titlepilot sample-tract sample_data                      # synthetic tract, intake workbook, answer key
+                                                         # add --mode runsheet or --mode folder to try the others
 titlepilot run sample_data/TX-SAMPLE-001 --mock          # uses <file>.mock.json instead of the API
 titlepilot score sample_data/answer_key
 pytest
@@ -30,10 +31,22 @@ The sample tract is invented: a 1978 deed, a deed of trust and its release, an u
 1. **Update fields and rules.** Landmen edit `docs/TX_Surface_Fields_and_Rules.xlsx`. The pilot lead sets Status to Approved, then runs:
    `titlepilot import-config docs/TX_Surface_Fields_and_Rules.xlsx`
    Only Starter and Approved rows are imported. `enabled` and `params` in `rules.yaml` are kept across imports.
-2. **Receive a package.** One folder per tract, named with the tract ID, holding the documents plus the agent's intake workbook (Intake Form and Document List sheets).
-3. **Run.** `titlepilot run path/to/TX-REEVES-014` (or `run-all path/to/parent`). The package check runs first; problems go back to the agent unless `--force` is used.
+2. **Receive a package.** One folder per tract, named with the tract ID, holding the documents. See "What the title agent delivers" below.
+3. **Run.** `titlepilot run path/to/TX-REEVES-014` (or `run-all path/to/parent`). With an intake workbook, the package check runs first and problems go back to the agent unless `--force` is used.
 4. **Review.** Open `output/<tract>/run_<n>/<tract>_review.xlsx`: Summary, Chain, Encumbrances and Flags. This stands in for the review screen during the pilot.
 5. **Score (pilot only).** Put the verified results in an answer key folder and run `titlepilot score path/to/answer_key`.
+
+## What the title agent delivers
+
+The intake workbook is optional. Each tract folder is handled the first way that applies:
+
+| Folder contains | Package source | Checks |
+| --- | --- | --- |
+| Intake workbook (Intake Form + Document List sheets) | intake form | Before extraction: every listed file uploaded, no extra files, every name search tied to a listed owner. After: PK01 |
+| The agent's own runsheet or index (file name contains "runsheet" or "index"; PDF, image, .xlsx or .csv) | agent runsheet | Claude reads the runsheet, then after extraction: PK02 (on the runsheet, not uploaded), PK03 (uploaded, not on the runsheet), PK01 using the names the runsheet says were searched |
+| Documents only | folder only | PK01 becomes one review flag listing every owner in the chain, so the landman confirms name searches were run |
+
+In every case the tract ID is the folder name unless the intake form says otherwise. The runsheet file is never treated as a recorded instrument.
 
 ## Layout
 
@@ -41,7 +54,7 @@ The sample tract is invented: a 1978 deed, a deed of trust and its release, an u
 config/          fields.yaml, rules.yaml (generated from the workbook), prompt.md (edit directly)
 docs/            Fields and Rules workbook and intake template
 src/titlepilot/
-  intake.py        read the intake workbook, package completeness check
+  intake.py        intake workbook, agent runsheet or folder-only package; completeness check
   pages.py         PDF/TIFF/image -> PNG pages
   extract.py       Claude API call; reply checked against the schema, one correction round; mock mode
   schema.py        JSON Schema built from fields.yaml ({value, source_text, confidence} per field)

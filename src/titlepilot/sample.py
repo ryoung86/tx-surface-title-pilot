@@ -120,8 +120,41 @@ def _intake(path):
     wb.save(path)
 
 
-def make_sample_tract(dest) -> Path:
-    """Creates <dest>/TX-SAMPLE-001/ and <dest>/answer_key/. Returns dest."""
+OWNERS_SEARCHED = ["Mary Doe", "John A. Smith", "Smith Ranch LLC"]
+MODES = ("intake", "runsheet", "folder")
+
+
+def _runsheet(path):
+    """A plain agent runsheet in the agent's own layout (not our template)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Runsheet"
+    ws.append(["Sample Title Services - Runsheet", None, None, None, None])
+    ws.append(["Tract: 160 ac, Sec. 22, Blk 4, H&GN RR Co. Survey, A-1234, Sample County, TX"])
+    ws.append(["Names searched (judgments/liens): " + "; ".join(OWNERS_SEARCHED)])
+    ws.append([])
+    ws.append(["Inst No.", "Instrument", "Recorded", "Grantor", "Grantee"])
+    entries = []
+    for _, _, _, o in DOCS:
+        row = [o["instrument_id"]["value"], o["instrument_type"]["value"], o["filing_date"]["value"],
+               o["grantors"]["value"][0]["name"], o["grantees"]["value"][0]["name"]]
+        ws.append(row)
+        entries.append(dict(zip(["recording_ref", "instrument_type", "filing_date", "grantor", "grantee"], row)))
+    wb.save(path)
+    # What Claude is expected to read from it, for --mock runs.
+    Path(str(path) + ".mock.json").write_text(json.dumps(
+        {"entries": entries, "owners_searched": OWNERS_SEARCHED}, indent=2))
+
+
+def make_sample_tract(dest, mode="intake") -> Path:
+    """Creates <dest>/TX-SAMPLE-001/ and <dest>/answer_key/. Returns dest.
+
+    mode: "intake"   - with the Intake Form / Document List workbook
+          "runsheet" - with the agent's own runsheet instead
+          "folder"   - documents only
+    """
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}")
     dest = Path(dest)
     tract = dest / TRACT
     tract.mkdir(parents=True, exist_ok=True)
@@ -129,7 +162,10 @@ def make_sample_tract(dest) -> Path:
         rec = _record(overrides)
         _pdf(tract / name, rec)
         (tract / f"{name}.mock.json").write_text(json.dumps(rec, indent=2))
-    _intake(tract / f"{TRACT}_intake.xlsx")
+    if mode == "intake":
+        _intake(tract / f"{TRACT}_intake.xlsx")
+    elif mode == "runsheet":
+        _runsheet(tract / f"{TRACT}_runsheet.xlsx")
 
     key = dest / "answer_key"
     key.mkdir(exist_ok=True)

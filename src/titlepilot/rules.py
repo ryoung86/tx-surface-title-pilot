@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from .fuzzy import token_sort_ratio
 
-from .validate import as_text, conf, val
+from .validate import as_text, conf, norm_ref, val
 
 DEFAULT_CRITICAL = ["instrument_id", "instrument_type", "filing_date", "grantors", "grantees", "legal_description_text"]
 
@@ -114,9 +114,36 @@ def mineral_exception(ctx, params):
 @rule("PK01")
 def owner_not_name_searched(ctx, params):
     searched = ctx.intake.owners if ctx.intake else []
+    if not searched:
+        if ctx.chain["owners"]:
+            yield None, ("No record of owner name searches was provided. Confirm liens and judgments "
+                         "were searched by name for: " + ", ".join(ctx.chain["owners"]))
+        return
     for o in ctx.chain["owners"]:
         if not any(_same(o, s, 85) for s in searched):
             yield None, f"Owner '{o}' in the chain was not listed as name-searched on the intake form"
+
+
+@rule("PK02")
+def runsheet_entry_not_uploaded(ctx, params):
+    entries = getattr(ctx.intake, "runsheet_entries", None) or []
+    have = set().union(*(i["ref_keys"] for i in ctx.instruments)) if ctx.instruments else set()
+    for e in entries:
+        key = norm_ref(e.get("recording_ref"))
+        if key and key not in have:
+            yield None, (f"On the agent's runsheet but not uploaded: {e.get('recording_ref')}"
+                         f" ({e.get('instrument_type') or 'type not shown'})")
+
+
+@rule("PK03")
+def document_not_on_runsheet(ctx, params):
+    entries = getattr(ctx.intake, "runsheet_entries", None) or []
+    keys = {norm_ref(e.get("recording_ref")) for e in entries} - {""}
+    if not keys:
+        return
+    for i in ctx.instruments:
+        if not i["ref_keys"] & keys:
+            yield i["instrument_id"], "Uploaded but not on the agent's runsheet"
 
 
 def run_rules(rules_cfg: list[dict], ctx: Ctx):

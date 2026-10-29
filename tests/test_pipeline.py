@@ -172,3 +172,68 @@ def test_live_run_4_types_and_holders():
     assert enc["Sample County, OPR 1980-000123"]["status"] == "released"
     assert chain["current_owner"] == ["Smith Ranch LLC"]
     assert chain["unclassified"] == []
+
+
+def _run(dest, tmp_path, mode):
+    root = make_sample_tract(dest, mode)
+    db = DB(tmp_path / f"{mode}.sqlite")
+    logs = []
+    res = run_tract(root / TRACT, load_config(CONFIG), db, tmp_path / "out", mock=True, log=logs.append)
+    return root, db, res, logs
+
+
+def test_runsheet_package(tmp_path):
+    root, db, res, logs = _run(tmp_path / "rs", tmp_path, "runsheet")
+    assert any("agent runsheet" in line for line in logs)
+    assert res["chain"]["current_owner"] == ["Smith Ranch LLC"]
+    rules = {f.rule_id for f in res["flags"]}
+    assert {"TS03", "TS07"} <= rules
+    assert not rules & {"PK01", "PK02", "PK03"}      # runsheet matches the uploads; owners were searched
+    assert score(db, root / "answer_key")["current_owner_correct"] == 1.0
+
+
+def test_runsheet_catches_missing_upload(tmp_path):
+    root = make_sample_tract(tmp_path / "rs2", "runsheet")
+    (root / TRACT / "SAMPLE_2005-000777.pdf").unlink()   # agent listed it but didn't upload it
+    res = run_tract(root / TRACT, load_config(CONFIG), DB(tmp_path / "x.sqlite"), tmp_path / "out",
+                    mock=True, log=lambda *_: None)
+    assert res is not None                              # still processed; the gap becomes a flag
+    pk02 = [f for f in res["flags"] if f.rule_id == "PK02"]
+    assert len(pk02) == 1 and "2005-000777" in pk02[0].message
+
+
+def test_runsheet_catches_extra_upload(tmp_path):
+    import json, shutil
+    root = make_sample_tract(tmp_path / "rs3", "runsheet")
+    t = root / TRACT
+    rs = json.loads((t / f"{TRACT}_runsheet.xlsx.mock.json").read_text())
+    rs["entries"] = [e for e in rs["entries"] if "2005-000777" not in e["recording_ref"]]
+    (t / f"{TRACT}_runsheet.xlsx.mock.json").write_text(json.dumps(rs))
+    res = run_tract(t, load_config(CONFIG), DB(tmp_path / "y.sqlite"), tmp_path / "out", mock=True, log=lambda *_: None)
+    pk03 = [f for f in res["flags"] if f.rule_id == "PK03"]
+    assert [f.instrument_id for f in pk03] == ["OPR 2005-000777"]
+
+
+def test_folder_only_package(tmp_path):
+    root, db, res, logs = _run(tmp_path / "fo", tmp_path, "folder")
+    assert any("folder only" in line for line in logs)
+    assert res["instruments"] == 6 and res["chain"]["current_owner"] == ["Smith Ranch LLC"]
+    pk01 = [f for f in res["flags"] if f.rule_id == "PK01"]
+    assert len(pk01) == 1 and "No record of owner name searches" in pk01[0].message
+    assert "John A. Smith" in pk01[0].message
+
+
+def test_runsheet_file_is_not_treated_as_a_document(tmp_path):
+    from titlepilot.intake import load_package
+    root = make_sample_tract(tmp_path / "rs4", "runsheet")
+    (root / TRACT / "agent index.pdf").write_bytes(b"%PDF-1.4")   # a PDF runsheet/index
+    pkg = load_package(root / TRACT)
+    names = [d.file_name for d in pkg.documents]
+    assert "agent index.pdf" not in names and len(names) == 6
+
+
+def test_runsheet_text_reads_agent_layout(tmp_path):
+    from titlepilot.intake import runsheet_text
+    root = make_sample_tract(tmp_path / "rs5", "runsheet")
+    text = runsheet_text(root / TRACT / f"{TRACT}_runsheet.xlsx")
+    assert "Names searched" in text and "OPR 2001-004410" in text

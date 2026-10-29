@@ -29,6 +29,7 @@ def export_review(path, intake, run_id, chain, flags, skipped, problems) -> Path
     ws.title = "Summary"
     for k, v in [("Run", run_id), ("Tract", intake.tract_id), ("County", intake.county),
                  ("Legal description", intake.legal_description), ("Title agent", intake.agent),
+                 ("Package source", intake.mode + (f" ({intake.runsheet_path.name})" if intake.runsheet_path else "")),
                  ("Current surface owner", ", ".join(chain["current_owner"]) or "NOT FOUND"),
                  ("Vesting instrument", chain["vesting_instrument"]),
                  ("Open encumbrances", sum(e["status"] == "open" for e in chain["encumbrances"])),

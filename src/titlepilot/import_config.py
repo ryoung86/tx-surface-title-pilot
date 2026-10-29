@@ -15,11 +15,25 @@ USE_STATUS = {"starter", "approved"}
 CODE_RULES = [
     {
         "id": "PK01",
-        "name": "Owner in the chain was not listed as name-searched on the intake form",
+        "name": "Owner in the chain has no record of a name search (intake form or runsheet)",
         "severity": "High",
         "enabled": True,
         "source": "code",
-    }
+    },
+    {
+        "id": "PK02",
+        "name": "Instrument on the agent's runsheet was not uploaded",
+        "severity": "High",
+        "enabled": True,
+        "source": "code",
+    },
+    {
+        "id": "PK03",
+        "name": "Uploaded document is not on the agent's runsheet",
+        "severity": "Low",
+        "enabled": True,
+        "source": "code",
+    },
 ]
 
 

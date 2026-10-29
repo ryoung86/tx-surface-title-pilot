@@ -1,4 +1,11 @@
-"""Read the title agent's intake workbook and check the package is complete."""
+"""Work out what the title agent delivered for a tract, and check it before extraction.
+
+A tract folder can come in three ways, checked in this order:
+  1. intake form    - the Intake Form / Document List workbook (fullest checks)
+  2. agent runsheet - the agent's own runsheet or index (a file with "runsheet" or
+                      "index" in its name); Claude reads it after the documents
+  3. folder only    - just the documents; the tract ID is the folder name
+"""
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -64,6 +71,57 @@ class Intake:
     notes: str | None = None
     documents: list = field(default_factory=list)
     source: Path | None = None
+    mode: str = "intake form"
+    runsheet_path: Path | None = None
+    runsheet_entries: list = field(default_factory=list)
+
+
+RUNSHEET_WORDS = ("runsheet", "run sheet", "run_sheet", "run-sheet", "index")
+RUNSHEET_EXTS = DOC_EXTS | {".xlsx", ".csv"}
+
+
+def is_runsheet(p: Path) -> bool:
+    return p.suffix.lower() in RUNSHEET_EXTS and any(w in p.stem.lower() for w in RUNSHEET_WORDS)
+
+
+def find_runsheet(folder) -> Path | None:
+    found = sorted(p for p in Path(folder).iterdir() if p.is_file() and is_runsheet(p) and not p.name.startswith("~$"))
+    return found[0] if found else None
+
+
+def document_files(folder) -> list[Path]:
+    return sorted(p for p in Path(folder).iterdir()
+                  if p.is_file() and p.suffix.lower() in DOC_EXTS and not is_runsheet(p))
+
+
+def load_package(folder) -> Intake:
+    """Intake form if present, else the agent's runsheet, else the folder's documents."""
+    folder = Path(folder)
+    path = find_intake_file(folder)
+    if path:
+        return read_intake(path)
+    runsheet = find_runsheet(folder)
+    return Intake(tract_id=folder.name, mode="agent runsheet" if runsheet else "folder only",
+                  runsheet_path=runsheet, documents=[DocRow(file_name=p.name) for p in document_files(folder)])
+
+
+def runsheet_text(path, max_rows=3000) -> str:
+    """Spreadsheet or CSV runsheet as plain text for Claude to read."""
+    path = Path(path)
+    lines = []
+    if path.suffix.lower() == ".csv":
+        import csv
+        with path.open(newline="", encoding="utf-8-sig", errors="replace") as f:
+            lines = [" | ".join(r) for r in csv.reader(f)]
+    else:
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        for ws in wb.worksheets:
+            lines.append(f"# Sheet: {ws.title}")
+            for row in ws.iter_rows(values_only=True):
+                cells = ["" if v is None else str(v) for v in row]
+                if any(cells):
+                    lines.append(" | ".join(cells).rstrip(" |"))
+    return "\n".join(lines[:max_rows])
 
 
 def find_intake_file(folder) -> Path | None:
@@ -108,9 +166,17 @@ def read_intake(path) -> Intake:
 
 
 def check_package(folder, intake: Intake) -> list[str]:
-    """Problems that should go back to the title agent before extraction."""
+    """Problems that should go back to the title agent before extraction.
+
+    Without an intake form there is nothing to compare against yet; the runsheet
+    is compared after extraction by rules PK02 and PK03.
+    """
     folder = Path(folder)
     problems = []
+    if intake.mode != "intake form":
+        if not intake.documents:
+            problems.append("No documents (PDF, TIFF or image files) found in the folder")
+        return problems
     if not intake.tract_id:
         problems.append("Intake form has no tract ID")
     elif folder.name != intake.tract_id:
@@ -118,7 +184,7 @@ def check_package(folder, intake: Intake) -> list[str]:
     if not intake.documents:
         problems.append("Document List is empty")
 
-    files = {p.name for p in folder.iterdir() if p.suffix.lower() in DOC_EXTS}
+    files = {p.name for p in document_files(folder)}
     listed = {d.file_name for d in intake.documents}
     problems += [f"Listed but not uploaded: {f}" for f in sorted(listed - files)]
     problems += [f"Uploaded but not on the Document List: {f}" for f in sorted(files - listed)]

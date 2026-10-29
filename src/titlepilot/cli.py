@@ -33,6 +33,8 @@ def main(argv=None):
 
     s = sub.add_parser("sample-tract", help="create a synthetic tract and answer key for testing")
     s.add_argument("dest", nargs="?", default="sample_data")
+    s.add_argument("--mode", choices=["intake", "runsheet", "folder"], default="intake",
+                   help="what the agent delivers: intake workbook, their own runsheet, or documents only")
 
     for name, helptext in [("run", "process one tract folder"), ("run-all", "process every tract folder in a parent folder")]:
         s = sub.add_parser(name, help=helptext)
@@ -55,7 +57,7 @@ def main(argv=None):
 
     if a.cmd == "sample-tract":
         from .sample import make_sample_tract
-        dest = make_sample_tract(a.dest)
+        dest = make_sample_tract(a.dest, a.mode)
         print(f"Sample tract in {dest}/. Try: titlepilot run {dest}/TX-SAMPLE-001 --mock")
         return
 

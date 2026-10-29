@@ -6,7 +6,7 @@ from pathlib import Path
 from .chain import build_chain
 from .extract import DEFAULT_MODEL, Extractor
 from .export import export_review
-from .intake import check_package, find_intake_file, read_intake
+from .intake import check_package, load_package
 from .pages import to_pages
 from .rules import Ctx, run_rules
 from .validate import normalize, schema_errors
@@ -14,10 +14,9 @@ from .validate import normalize, schema_errors
 
 def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL, force=False, log=print):
     folder = Path(folder)
-    intake_path = find_intake_file(folder)
-    if not intake_path:
-        raise SystemExit(f"{folder}: no intake workbook with 'Intake Form' and 'Document List' sheets")
-    intake = read_intake(intake_path)
+    intake = load_package(folder)
+    source = intake.mode + (f" ({intake.runsheet_path.name})" if intake.runsheet_path else "")
+    log(f"  Package: {source}")
 
     problems = check_package(folder, intake)
     for p in problems:
@@ -27,9 +26,24 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
         return None
 
     run_id = db.start_run(intake, cfg, "mock" if mock else model)
+    db.event(run_id, "package_source", source)
     db.event(run_id, "package_checked", json.dumps(problems))
     extractor = Extractor(cfg.schema, cfg.prompt, model=model, mock=mock)
     work = Path(out_dir) / intake.tract_id / f"run_{run_id}"
+
+    if intake.runsheet_path:
+        try:
+            rs = extractor.read_runsheet(intake.runsheet_path, work / "pages" / "_runsheet")
+            intake.runsheet_entries = rs.get("entries", [])
+            if not intake.owners:
+                intake.owners = [o for o in rs.get("owners_searched", []) if o]
+            db.add_output(run_id, "runsheet", rs)
+            log(f"  Runsheet: {len(intake.runsheet_entries)} instruments listed, "
+                f"{len(intake.owners)} owners shown as name-searched")
+        except Exception as e:
+            problems.append(f"Runsheet {intake.runsheet_path.name} could not be read: {e}")
+            db.event(run_id, "runsheet_failed", str(e))
+            log(f"  Runsheet could not be read: {e}")
 
     instruments = []
     docs = [d for d in intake.documents if (folder / d.file_name).exists()]
