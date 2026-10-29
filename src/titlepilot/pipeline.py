@@ -52,7 +52,7 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
         path = folder / doc.file_name
         started = time.monotonic()
         try:
-            pages = to_pages(path, work / "pages" / path.stem)
+            pages = to_pages(path, work / "pages" / Path(doc.file_name).with_suffix("").as_posix().replace("/", "__"))
             record = extractor.extract(path, pages)
         except Exception as e:  # one bad document should not stop the tract
             db.event(run_id, "extraction_failed", f"{doc.file_name}: {e}")

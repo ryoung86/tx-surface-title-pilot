@@ -237,3 +237,30 @@ def test_runsheet_text_reads_agent_layout(tmp_path):
     root = make_sample_tract(tmp_path / "rs5", "runsheet")
     text = runsheet_text(root / TRACT / f"{TRACT}_runsheet.xlsx")
     assert "Names searched" in text and "OPR 2001-004410" in text
+
+
+def _nest(tract):
+    """Move the sample documents into subfolders, the way an agent might organize them."""
+    import shutil
+    for f in sorted(tract.glob("SAMPLE_*")):
+        sub = tract / ("Deeds" if any(k in f.name for k in ("1978", "1994")) else "Liens and Easements")
+        if "2001" in f.name:
+            sub = sub / "Name searches"
+        sub.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(f), sub / f.name)
+
+
+@pytest.mark.parametrize("mode", ["intake", "runsheet", "folder"])
+def test_documents_in_subfolders(tmp_path, mode):
+    root = make_sample_tract(tmp_path / mode, mode)
+    _nest(root / TRACT)
+    assert not list((root / TRACT).glob("*.pdf"))          # nothing left at the top level
+    logs = []
+    res = run_tract(root / TRACT, load_config(CONFIG), DB(tmp_path / "s.sqlite"), tmp_path / "out",
+                    mock=True, log=logs.append)
+    assert res is not None, logs
+    assert res["instruments"] == 6
+    assert res["chain"]["current_owner"] == ["Smith Ranch LLC"]
+    files = {i["file_name"] for i in res["chain"]["instruments"]}
+    assert "Liens and Easements/Name searches/SAMPLE_2001-004410.pdf" in files
+    assert not {f.rule_id for f in res["flags"]} & {"PK02", "PK03"}

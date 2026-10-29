@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from . import __version__
 from .config import load_config
 from .db import DB
 from .extract import DEFAULT_MODEL
@@ -26,6 +27,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="titlepilot", description="Texas surface title extraction pilot")
     p.add_argument("--config", default="config", help="config folder (default: config)")
     p.add_argument("--db", default="runs.sqlite", help="run history database (default: runs.sqlite)")
+    p.add_argument("--version", action="version", version=f"titlepilot {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("import-config", help="build fields.yaml and rules.yaml from the Fields and Rules workbook")
@@ -66,6 +68,7 @@ def main(argv=None):
     if a.cmd in ("run", "run-all"):
         from .pipeline import run_tract
         cfg = load_config(a.config)
+        print(f"titlepilot {__version__}")
         folders = [Path(a.folder)] if a.cmd == "run" else sorted(
             d for d in Path(a.folder).iterdir() if d.is_dir() and d.name != "answer_key")
         for folder in folders:

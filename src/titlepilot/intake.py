@@ -84,14 +84,27 @@ def is_runsheet(p: Path) -> bool:
     return p.suffix.lower() in RUNSHEET_EXTS and any(w in p.stem.lower() for w in RUNSHEET_WORDS)
 
 
+def _walk(folder):
+    """Every file in the tract folder and its subfolders, skipping hidden and Office temp files."""
+    folder = Path(folder)
+    for p in sorted(folder.rglob("*")):
+        if p.is_file() and not any(part.startswith((".", "~$")) for part in p.relative_to(folder).parts):
+            yield p
+
+
+def rel_name(folder, p) -> str:
+    """Path relative to the tract folder, e.g. 'Deeds/1978 warranty deed.pdf'."""
+    return Path(p).relative_to(folder).as_posix()
+
+
 def find_runsheet(folder) -> Path | None:
-    found = sorted(p for p in Path(folder).iterdir() if p.is_file() and is_runsheet(p) and not p.name.startswith("~$"))
+    found = [p for p in _walk(folder) if is_runsheet(p)]
     return found[0] if found else None
 
 
 def document_files(folder) -> list[Path]:
-    return sorted(p for p in Path(folder).iterdir()
-                  if p.is_file() and p.suffix.lower() in DOC_EXTS and not is_runsheet(p))
+    """Recorded-instrument files anywhere under the tract folder (subfolders included)."""
+    return [p for p in _walk(folder) if p.suffix.lower() in DOC_EXTS and not is_runsheet(p)]
 
 
 def load_package(folder) -> Intake:
@@ -99,10 +112,19 @@ def load_package(folder) -> Intake:
     folder = Path(folder)
     path = find_intake_file(folder)
     if path:
-        return read_intake(path)
+        intake = read_intake(path)
+        # The Document List gives bare file names; find them if they sit in subfolders.
+        found = {}
+        for p in document_files(folder):
+            found.setdefault(p.name, rel_name(folder, p))
+        for d in intake.documents:
+            if not (folder / d.file_name).exists() and Path(d.file_name).name in found:
+                d.file_name = found[Path(d.file_name).name]
+        return intake
     runsheet = find_runsheet(folder)
     return Intake(tract_id=folder.name, mode="agent runsheet" if runsheet else "folder only",
-                  runsheet_path=runsheet, documents=[DocRow(file_name=p.name) for p in document_files(folder)])
+                  runsheet_path=runsheet,
+                  documents=[DocRow(file_name=rel_name(folder, p)) for p in document_files(folder)])
 
 
 def runsheet_text(path, max_rows=3000) -> str:
@@ -125,7 +147,7 @@ def runsheet_text(path, max_rows=3000) -> str:
 
 
 def find_intake_file(folder) -> Path | None:
-    for p in sorted(Path(folder).glob("*.xlsx")):
+    for p in (x for x in _walk(folder) if x.suffix.lower() == ".xlsx"):
         if p.name.startswith("~$"):
             continue
         try:
@@ -185,7 +207,7 @@ def check_package(folder, intake: Intake) -> list[str]:
         problems.append("Document List is empty")
 
     files = {p.name for p in document_files(folder)}
-    listed = {d.file_name for d in intake.documents}
+    listed = {Path(d.file_name).name for d in intake.documents}
     problems += [f"Listed but not uploaded: {f}" for f in sorted(listed - files)]
     problems += [f"Uploaded but not on the Document List: {f}" for f in sorted(files - listed)]
 
