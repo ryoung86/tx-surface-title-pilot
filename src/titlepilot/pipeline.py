@@ -7,7 +7,7 @@ from pathlib import Path
 from .chain import build_chain
 from .extract import DEFAULT_MODEL, Extractor
 from .export import export_review
-from .intake import acres_in, check_package, load_package, load_tract_list
+from .intake import acres_in, check_package, find_tract_list, load_package, load_tract_list
 from .pages import to_pages
 from .rules import Ctx, run_rules
 from .validate import norm_date, norm_ref, normalize, schema_errors
@@ -56,17 +56,21 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
             + (f", names searched: {', '.join(names)}" if names else ""))
 
     # The tract's acreage lets out-sales be told apart from conveyances of the whole tract.
-    listed = load_tract_list(folder.parent / "tracts.csv").get(intake.tract_id, {})
+    tract_list = find_tract_list(folder)
+    listed = load_tract_list(tract_list).get(intake.tract_id, {}) if tract_list else {}
+    if tract_list and not listed:
+        log(f"  {tract_list} has no row for tract ID '{intake.tract_id}' (check the tract_id column)")
     intake.county = intake.county or listed.get("county") or None
     intake.legal_description = intake.legal_description or listed.get("legal_description") or None
-    acres_sources = [("tracts.csv", acres_in(f"{listed.get('acreage')} acres") if listed.get("acreage") else None),
+    acres_sources = [(str(tract_list), acres_in(f"{listed.get('acreage')} acres") if listed.get("acreage") else None),
                      ("intake form", acres_in(intake.legal_description)), ("tract runsheet", runsheet_acres)]
     acres_source = next(((src, a) for src, a in acres_sources if a), (None, None))
     intake.subject_acres = acres_source[1]
     if intake.subject_acres:
         log(f"  Tract acreage: {intake.subject_acres:g} ac (from {acres_source[0]})")
     else:
-        log("  Tract acreage: unknown (add it to tracts.csv so out-sales can be handled)")
+        log("  Tract acreage: unknown. No tracts.csv found in the tract folder, the folder holding the tracts, "
+            "or the folder you're running from, so out-sales can't be told apart from whole-tract sales")
 
     instruments = []
     docs = [d for d in intake.documents if (folder / d.file_name).exists()]

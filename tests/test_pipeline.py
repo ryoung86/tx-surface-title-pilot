@@ -1,3 +1,4 @@
+import pathlib
 import sqlite3
 from pathlib import Path
 
@@ -464,3 +465,24 @@ def test_name_runsheet_flags_only_name_search_hits():
     assert len(pk02) == 4                                          # 3 hits + 1 summary line, not 28 flags
     assert sum("Name search hit" in m for m in pk02) == 3
     assert any(m.startswith("25 other instruments") for m in pk02)
+
+
+def test_tract_list_found_in_several_places(tmp_path, monkeypatch):
+    from titlepilot.intake import find_tract_list
+    tract = tmp_path / "proj" / "tracts" / "CCS.TX.SDY.0143"
+    tract.mkdir(parents=True)
+    assert find_tract_list(tract) is None or find_tract_list(tract).parent == pathlib.Path.cwd()
+    monkeypatch.chdir(tmp_path / "proj")
+    (tmp_path / "proj" / "tracts.csv").write_text("tract_id,acreage\nCCS.TX.SDY.0143,4.6\n")
+    assert find_tract_list(tract) == (tmp_path / "proj" / "tracts.csv").resolve()      # project folder
+    (tmp_path / "proj" / "tracts" / "tracts.csv").write_text("tract_id,acreage\nCCS.TX.SDY.0143,4.6\n")
+    assert find_tract_list(tract) == (tmp_path / "proj" / "tracts" / "tracts.csv").resolve()   # beside tracts
+
+
+def test_unreadable_deed_acreage_is_flagged():
+    from titlepilot.chain import build_chain
+    docs = [d for d in _sdy0143() if "2018003815" not in d["instrument_id"]]
+    docs.append(_real("Instrument No. 2018003815", "Warranty Deed", "2018-02-20", ["Alvaro Banda"],
+                      ["Alvaro Banda, Jr."], None, "all"))          # acreage not read
+    chain = build_chain(docs, subject_acres=4.6)
+    assert any("Acreage could not be read" in m for _, m in chain["ownership_notes"])

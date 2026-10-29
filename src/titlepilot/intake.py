@@ -114,6 +114,16 @@ def acres_in(text) -> float | None:
     return float(m.group(1).replace(",", "")) if m else None
 
 
+def find_tract_list(folder) -> Path | None:
+    """tracts.csv in the tract folder, the folder holding the tract folders, or the project folder."""
+    folder = Path(folder).resolve()
+    for place in (folder, folder.parent, Path.cwd()):
+        for name in ("tracts.csv", "tract.csv"):
+            if (place / name).exists():
+                return place / name
+    return None
+
+
 def load_tract_list(path) -> dict:
     """tracts.csv beside the tract folders: tract_id, acreage (and optionally county, legal_description)."""
     import csv

@@ -100,6 +100,10 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
             elif is_fractional(c):
                 notes.append((c["instrument_id"], f"Conveys an undivided interest ({c['interest']}) to {who} after "
                                                   "the vesting deed: ownership may be shared"))
+        if subject_acres and vesting.get("acreage") is None and len(conveyances) >= 2:
+            notes.append((vesting["instrument_id"],
+                          "Acreage could not be read from this deed, so it is taken as covering the whole "
+                          f"{subject_acres:g} ac tract: confirm it isn't an out-sale"))
         if not subject_acres and len(conveyances) >= 2 and vesting is conveyances[-1]:
             prev = conveyances[-2]
             if vesting.get("acreage") and prev.get("acreage") and vesting["acreage"] < prev["acreage"] * PARTIAL_AREA:
