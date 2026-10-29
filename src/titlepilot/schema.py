@@ -3,11 +3,11 @@
 Every field is returned as {value, source_text, confidence} so reviewers can
 see what the model read and how sure it was.
 
-The schema is sent as a structured output (output_config.format), which
-requires additionalProperties: false on every object and allows only a few
-nullable fields per request. So nothing here is nullable: a field that is not
+The schema is kept strict (additionalProperties: false, every property
+required, nothing nullable) so replies are easy to check. A field that is not
 on the page comes back as "" (or [] for lists), and validate.val() turns that
-into None.
+into None. Keeping this shape also leaves the door open to strict structured
+outputs if a later schema is small enough to compile.
 """
 
 PARTY = {

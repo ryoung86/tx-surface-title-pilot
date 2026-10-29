@@ -43,7 +43,7 @@ docs/            Fields and Rules workbook and intake template
 src/titlepilot/
   intake.py        read the intake workbook, package completeness check
   pages.py         PDF/TIFF/image -> PNG pages
-  extract.py       Claude API call using structured outputs (JSON matching the schema); mock mode
+  extract.py       Claude API call; reply checked against the schema, one correction round; mock mode
   schema.py        JSON Schema built from fields.yaml ({value, source_text, confidence} per field)
   validate.py      schema errors, normalized dates, references, names
   chain.py         ordering, current owner, encumbrances open/released

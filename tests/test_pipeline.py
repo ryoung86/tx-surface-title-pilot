@@ -74,7 +74,7 @@ def test_rerun_links_to_previous_run(sample, tmp_path):
 
 
 def test_schema_fits_structured_output_rules():
-    """output_config.format needs additionalProperties: false on every object and few nullable fields."""
+    """Strict shape: additionalProperties false, all properties required, no nullable types."""
     schema = load_config(CONFIG).schema
 
     def walk(node):
@@ -97,3 +97,10 @@ def test_sample_mock_records_match_schema(sample):
     schema = load_config(CONFIG).schema
     for f in (sample / TRACT).glob("*.mock.json"):
         assert schema_errors(json.loads(f.read_text()), schema) == [], f.name
+
+
+def test_parse_json_tolerates_fences_and_text():
+    from titlepilot.extract import ExtractionError, parse_json
+    assert parse_json('Here it is:\n```json\n{"a": 1}\n```') == {"a": 1}
+    with pytest.raises(ExtractionError):
+        parse_json("no json here")
