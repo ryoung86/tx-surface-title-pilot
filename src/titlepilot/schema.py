@@ -2,41 +2,48 @@
 
 Every field is returned as {value, source_text, confidence} so reviewers can
 see what the model read and how sure it was.
+
+The schema is sent as a structured output (output_config.format), which
+requires additionalProperties: false on every object and allows only a few
+nullable fields per request. So nothing here is nullable: a field that is not
+on the page comes back as "" (or [] for lists), and validate.val() turns that
+into None.
 """
 
 PARTY = {
     "type": "object",
     "properties": {
         "name": {"type": "string"},
-        "marital_status": {"type": ["string", "null"]},
-        "spouse": {"type": ["string", "null"]},
-        "capacity": {"type": ["string", "null"]},
+        "marital_status": {"type": "string"},
+        "spouse": {"type": "string"},
+        "capacity": {"type": "string"},
     },
-    "required": ["name"],
+    "required": ["name", "marital_status", "spouse", "capacity"],
+    "additionalProperties": False,
 }
 
 VALUE_TYPES = {
-    "text": {"type": ["string", "null"]},
-    "date": {"type": ["string", "null"]},
-    "number": {"type": ["number", "null"]},
-    "list": {"type": ["array", "null"], "items": {"type": "string"}},
-    "list of parties": {"type": ["array", "null"], "items": PARTY},
-    "group": {"type": ["object", "null"], "additionalProperties": {"type": ["string", "null"]}},
+    "text": {"type": "string"},
+    "date": {"type": "string", "description": "As written on the instrument"},
+    "number": {"type": "string", "description": "As written, e.g. '160' or '160.25'"},
+    "group": {"type": "string"},
+    "list": {"type": "array", "items": {"type": "string"}},
+    "list of parties": {"type": "array", "items": PARTY},
 }
 
 
 def field_schema(field: dict) -> dict:
     ftype = (field.get("type") or "text").strip().lower()
-    value = VALUE_TYPES.get(ftype, VALUE_TYPES["text"])
     return {
         "type": "object",
         "description": field.get("description", ""),
         "properties": {
-            "value": value,
-            "source_text": {"type": ["string", "null"]},
+            "value": VALUE_TYPES.get(ftype, VALUE_TYPES["text"]),
+            "source_text": {"type": "string"},
             "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         },
-        "required": ["value", "confidence"],
+        "required": ["value", "source_text", "confidence"],
+        "additionalProperties": False,
     }
 
 
@@ -45,4 +52,5 @@ def build_schema(fields: list[dict]) -> dict:
         "type": "object",
         "properties": {f["name"]: field_schema(f) for f in fields},
         "required": [f["name"] for f in fields],
+        "additionalProperties": False,
     }

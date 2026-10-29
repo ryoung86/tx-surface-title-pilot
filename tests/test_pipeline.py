@@ -71,3 +71,29 @@ def test_rerun_links_to_previous_run(sample, tmp_path):
     second = run_tract(sample / TRACT, cfg, db, tmp_path / "out", mock=True, log=lambda *_: None)
     prev = db.conn.execute("SELECT previous_run_id FROM runs WHERE id = ?", (second["run_id"],)).fetchone()[0]
     assert prev == first["run_id"]
+
+
+def test_schema_fits_structured_output_rules():
+    """output_config.format needs additionalProperties: false on every object and few nullable fields."""
+    schema = load_config(CONFIG).schema
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                assert node.get("additionalProperties") is False
+                assert set(node.get("required", [])) == set(node.get("properties", {}))
+            assert not isinstance(node.get("type"), list), "nullable/union types count toward a small limit"
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(schema)
+
+
+def test_sample_mock_records_match_schema(sample):
+    import json
+    from titlepilot.validate import schema_errors
+    schema = load_config(CONFIG).schema
+    for f in (sample / TRACT).glob("*.mock.json"):
+        assert schema_errors(json.loads(f.read_text()), schema) == [], f.name

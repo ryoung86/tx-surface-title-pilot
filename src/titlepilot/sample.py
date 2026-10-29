@@ -17,16 +17,20 @@ ALL_FIELDS = [
     "conveyance_type", "surface_interest", "mineral_exception", "homestead_indicators", "easements",
     "restrictions", "liens", "plat_reference", "possession_notes",
 ]
+LIST_FIELDS = ["instrument_type", "conveyance_type", "grantors", "grantees", "refers_to", "easements", "liens"]
 LEGAL = "160 acres, Section 22, Block 4, H&GN RR Co. Survey, Abstract 1234, Sample County, Texas"
 
 
 def F(value, confidence="high", source=None):
-    return {"value": value, "source_text": source if source is not None else (None if value is None else str(value)),
+    """Field in the structured-output shape: "" means not on the page."""
+    if value is None:
+        value = ""
+    return {"value": value, "source_text": source if source is not None else (value if isinstance(value, str) else ""),
             "confidence": confidence}
 
 
 def P(*names):
-    return [{"name": n, "marital_status": None, "spouse": None, "capacity": "individual"} for n in names]
+    return [{"name": n, "marital_status": "", "spouse": "", "capacity": "individual"} for n in names]
 
 
 # file, found_by, owner_searched, record overrides
@@ -62,14 +66,17 @@ DOCS = [
 def _record(overrides):
     rec = {f: F(None) for f in ALL_FIELDS}
     rec.update({"county": F("Sample"), "legal_description_text": F(LEGAL), "survey_name": F("H&GN RR Co."),
-                "abstract_no": F("1234"), "block": F("4"), "section": F("22"), "acreage": F(160)})
+                "abstract_no": F("1234"), "block": F("4"), "section": F("22"), "acreage": F("160")})
     rec.update(overrides)
+    for k in LIST_FIELDS:  # list-typed fields are arrays in the structured output
+        v = rec[k]["value"]
+        rec[k] = {**rec[k], "value": [] if v == "" else ([v] if isinstance(v, str) else v)}
     return rec
 
 
 def _pdf(path, rec):
     lines = ["SYNTHETIC TEST DOCUMENT - NOT A REAL RECORD", "",
-             f"{rec['instrument_type']['value']}   {rec['instrument_id']['value']}",
+             f"{'; '.join(rec['instrument_type']['value'])}   {rec['instrument_id']['value']}",
              f"Filed: {rec['filing_date']['value']}",
              "Grantor: " + ", ".join(p["name"] for p in rec["grantors"]["value"]),
              "Grantee: " + ", ".join(p["name"] for p in rec["grantees"]["value"]),

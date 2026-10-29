@@ -14,8 +14,23 @@ def schema_errors(record: dict, schema: dict) -> list[str]:
 
 
 def val(record: dict, name: str):
+    """Field value, with "" / [] (the schema's 'not on the page') returned as None."""
     f = record.get(name)
-    return f.get("value") if isinstance(f, dict) else None
+    v = f.get("value") if isinstance(f, dict) else None
+    if v is None or (isinstance(v, (str, list)) and not v):
+        return None
+    if isinstance(v, str) and not v.strip():
+        return None
+    return v
+
+
+def as_text(v):
+    """Lists (e.g. a 'pick from list' field returned as an array) joined into one string."""
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return "; ".join(str(x) for x in v if x) or None
+    return str(v)
 
 
 def conf(record: dict, name: str):
@@ -54,7 +69,7 @@ def normalize(record: dict, doc) -> dict:
         "instrument_id": iid,
         "ref_keys": {k for k in (norm_ref(iid), norm_ref(doc.recording_ref)) if k},
         "file_name": doc.file_name,
-        "type": norm_type(val(record, "instrument_type") or doc.instrument_type),
+        "type": norm_type(as_text(val(record, "instrument_type")) or doc.instrument_type),
         "filing_date": norm_date(val(record, "filing_date")) or norm_date(doc.filing_date),
         "grantors": party_names(val(record, "grantors")),
         "grantees": party_names(val(record, "grantees")),

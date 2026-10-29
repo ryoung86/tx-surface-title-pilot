@@ -1,5 +1,9 @@
 """Send an instrument's pages to Claude and get back schema-shaped JSON.
 
+Uses structured outputs (output_config.format = json_schema), which guarantees
+the reply matches the schema. Forced tool_choice is not supported by the 5.5
+models, so it is not used here.
+
 Mock mode reads `<document>.mock.json` beside each file, so the pipeline can be
 built and tested before real documents or an API key are available.
 """
@@ -10,6 +14,10 @@ import time
 from pathlib import Path
 
 DEFAULT_MODEL = os.environ.get("TITLEPILOT_MODEL", "claude-sonnet-5-5")
+
+
+class ExtractionError(RuntimeError):
+    pass
 
 
 class Extractor:
@@ -42,17 +50,24 @@ class Extractor:
             try:
                 resp = self.client.messages.create(
                     model=self.model,
-                    max_tokens=8000,
-                    tools=[{"name": "record_instrument",
-                            "description": "Record the abstracted instrument",
-                            "input_schema": self.schema}],
-                    tool_choice={"type": "tool", "name": "record_instrument"},
+                    max_tokens=16000,
                     messages=[{"role": "user", "content": content}],
+                    output_config={"format": {"type": "json_schema", "schema": self.schema}},
                 )
-                record = next(b.input for b in resp.content if b.type == "tool_use")
-                record["_meta"] = {"model": self.model, "usage": resp.usage.model_dump()}
-                return record
             except self._retryable as e:
                 last_error = e
                 time.sleep(2 ** attempt * 5)
-        raise RuntimeError(f"extraction failed after 3 attempts: {last_error}")
+                continue
+
+            if resp.stop_reason == "refusal":
+                raise ExtractionError("model declined to process this document")
+            if resp.stop_reason == "max_tokens":
+                raise ExtractionError("reply was cut off (max_tokens); split the document or raise max_tokens")
+            text = "".join(b.text for b in resp.content if b.type == "text")
+            try:
+                record = json.loads(text)
+            except json.JSONDecodeError as e:
+                raise ExtractionError(f"reply was not valid JSON: {e}") from e
+            record["_meta"] = {"model": self.model, "usage": resp.usage.model_dump()}
+            return record
+        raise ExtractionError(f"extraction failed after 3 attempts: {last_error}")

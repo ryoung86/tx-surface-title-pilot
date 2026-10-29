@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from .fuzzy import token_sort_ratio
 
 from .chain import is_release
-from .validate import conf, val
+from .validate import as_text, conf, val
 
 LIEN_TYPES = {"deed of trust", "vendor's lien", "lien", "mechanic's lien"}
 JUDGMENT_TYPES = {"abstract of judgment", "judgment", "lis pendens", "tax lien"}
@@ -102,7 +102,7 @@ def unreleased_judgment(ctx, params):
 @rule("TS06")
 def no_warranty_deed(ctx, params):
     for i in ctx.instruments:
-        ct = (val(i["record"], "conveyance_type") or "").lower()
+        ct = (as_text(val(i["record"], "conveyance_type")) or "").lower()
         if i["type"] in NO_WARRANTY or "quitclaim" in ct or "without warranty" in ct:
             yield i["instrument_id"], "Quitclaim or no-warranty deed in the chain"
 
@@ -110,7 +110,7 @@ def no_warranty_deed(ctx, params):
 @rule("TS07")
 def mineral_exception(ctx, params):
     for i in ctx.instruments:
-        v = val(i["record"], "mineral_exception")
+        v = as_text(val(i["record"], "mineral_exception"))
         if v:
             yield i["instrument_id"], f"Mineral exception or reservation: {str(v)[:150]}"
 
