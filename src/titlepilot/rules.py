@@ -126,21 +126,41 @@ def owner_not_name_searched(ctx, params):
             yield None, f"Owner '{o}' in the chain was not listed as name-searched on the intake form"
 
 
+# Runsheet abbreviations for what a name search is meant to catch.
+_NAME_HIT_ABBR = {"dt", "dot", "aj", "abj", "absjdgmt", "lp", "ftl", "stl", "ucc", "jdgmt", "jgmt", "jdmt",
+                  "mml", "ml", "fs", "lien"}   # compared with spaces, dots and slashes removed
+
+
+def name_search_hit(itype) -> bool:
+    """Liens, judgments, deeds of trust, lis pendens, UCC filings: the reason names are searched."""
+    from .chain import classify
+    from .validate import norm_type
+    t = norm_type(itype)
+    return classify(t) in ("lien", "judgment") or re.sub(r"[\s./]", "", t) in _NAME_HIT_ABBR
+
+
 @rule("PK02")
 def runsheet_entry_not_uploaded(ctx, params):
-    """Tract runsheet entries should all be in the package. A name runsheet lists everything
-    recorded under a person's name, much of it on other land, so its misses are review items."""
+    """Tract runsheet entries should all be in the package. A name runsheet lists everything recorded
+    under a person's name, mostly on other land: only liens, judgments and similar hits are listed
+    one by one for review; the rest are summarized in one line."""
     have = set().union(*(i["ref_keys"] for i in ctx.instruments)) if ctx.instruments else set()
+    other_by_names = {}
     for e in getattr(ctx.intake, "runsheet_entries", None) or []:
         key = norm_ref(e.get("recording_ref"))
         if not key or key in have:
             continue
         what = f"{e.get('recording_ref')} ({e.get('instrument_type') or 'type not shown'})"
-        if e.get("_kind") == "name":
-            yield None, (f"On the name runsheet for {e.get('_names') or 'the owner'} but not in the package: {what}. "
-                         "Confirm whether it affects this tract")
-        else:
+        if e.get("_kind") != "name":
             yield None, f"On the agent's runsheet but not uploaded: {what}"
+        elif name_search_hit(e.get("instrument_type")):
+            yield None, (f"Name search hit for {e.get('_names') or 'an owner'} not in the package: {what}, "
+                         f"{e.get('grantor') or '?'} to {e.get('grantee') or '?'}. Confirm whether it affects this tract")
+        else:
+            other_by_names[e.get("_names") or "an owner"] = other_by_names.get(e.get("_names") or "an owner", 0) + 1
+    for names, count in other_by_names.items():
+        yield None, (f"{count} other instruments on the name runsheet for {names} are not in the package "
+                     "(usually other land). Spot-check that none covers this tract")
 
 
 @rule("PK03")

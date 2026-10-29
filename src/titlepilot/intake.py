@@ -155,6 +155,24 @@ def load_package(folder) -> Intake:
                   documents=[DocRow(file_name=rel_name(folder, p)) for p in document_files(folder)])
 
 
+def runsheet_rows(path) -> list[str]:
+    """Spreadsheet or CSV runsheet as one text line per non-empty row."""
+    path = Path(path)
+    if path.suffix.lower() == ".csv":
+        import csv
+        with path.open(newline="", encoding="utf-8-sig", errors="replace") as f:
+            return [" | ".join(r).rstrip(" |") for r in csv.reader(f) if any(c.strip() for c in r)]
+    lines = []
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    for ws in wb.worksheets:
+        lines.append(f"# Sheet: {ws.title}")
+        for row in ws.iter_rows(values_only=True):
+            cells = ["" if v is None else str(v) for v in row]
+            if any(cells):
+                lines.append(" | ".join(cells).rstrip(" |"))
+    return lines
+
+
 def runsheet_text(path, max_rows=3000) -> str:
     """Spreadsheet or CSV runsheet as plain text for Claude to read."""
     path = Path(path)

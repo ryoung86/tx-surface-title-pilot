@@ -376,10 +376,91 @@ def test_sdy0143_rules_with_name_runsheet():
     for f in flags:
         by_rule.setdefault(f.rule_id, []).append(f)
     assert "PK03" not in by_rule
-    pk02 = by_rule["PK02"]
-    assert len(pk02) == 4 and all("name runsheet" in f.message for f in pk02)
-    assert not any("2018003815" in f.message for f in pk02)
+    pk02 = [f.message for f in by_rule["PK02"]]
+    # the two deeds of trust are listed one by one; the assignment and affidavit are summarized
+    assert sum("Name search hit" in m and "DEED OF TRUST" in m for m in pk02) == 2
+    assert any(m.startswith("2 other instruments on the name runsheet for Alvaro Banda") for m in pk02)
+    assert len(pk02) == 3
+    assert not any("2018003815" in m for m in pk02)
     assert "R01" not in by_rule                                           # Dunagans acquired in 1965
     assert [f.instrument_id for f in by_rule["OW01"]] == ["Instrument No. 2018003815"]
     r12 = [f.message for f in by_rule.get("R12", [])]
     assert not any("DEEDS" in m for m in r12)                              # descriptions aren't references
+
+
+# --- long runsheets (Dunagan_Grace_Willis_Name Runsheet pg 1.pdf was cut off) --------------------
+
+class _FakeStream:
+    def __init__(self, resp): self.resp = resp
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def get_final_message(self): return self.resp
+
+
+class _FakeClient:
+    """Answers each call with the next canned (text, stop_reason)."""
+    def __init__(self, replies):
+        from types import SimpleNamespace as NS
+        self.calls, self._replies = [], list(replies)
+        def stream(**kw):
+            self.calls.append(kw)
+            text, stop = self._replies.pop(0)
+            return _FakeStream(NS(stop_reason=stop, content=[NS(type="text", text=text)],
+                                  usage=NS(model_dump=lambda: {})))
+        self.messages = NS(stream=stream)
+
+
+def _entry(ref, t="WD", g1="Grace Willis Dunagan", g2="Someone"):
+    return {"recording_ref": ref, "instrument_type": t, "filing_date": "", "grantor": g1, "grantee": g2}
+
+
+def test_salvage_keeps_complete_entries_from_cut_off_reply():
+    import json
+    from titlepilot.extract import salvage_runsheet
+    full = json.dumps({"runsheet_kind": "name", "owners_searched": ["Grace Willis Dunagan"], "subject_acreage": "",
+                       "subject_description": "", "entries": [_entry(f"{600 + n}/{n}") for n in range(40)]})
+    cut = full[: int(len(full) * 0.6)]                       # reply stopped partway through
+    out = salvage_runsheet(cut)
+    assert out["runsheet_kind"] == "name" and out["owners_searched"] == ["Grace Willis Dunagan"]
+    assert 20 <= len(out["entries"]) < 40
+    assert all(e["recording_ref"] for e in out["entries"])
+
+
+def test_pdf_runsheet_read_page_by_page_and_merged(tmp_path):
+    import json
+    from PIL import Image
+    from titlepilot.extract import Extractor
+    pdf = tmp_path / "Dunagan_Grace_Willis_Name Runsheet.pdf"
+    pages = [Image.new("RGB", (850, 1100), "white") for _ in range(3)]
+    pages[0].save(pdf, "PDF", save_all=True, append_images=pages[1:])
+    page = lambda refs, kind="name": json.dumps({"runsheet_kind": kind, "owners_searched": ["Grace Willis Dunagan"],
+                                                 "subject_acreage": "", "subject_description": "",
+                                                 "entries": [_entry(r) for r in refs]})
+    page3_cut = page([f"9{n}/1" for n in range(30)])[:900]     # third page is cut off
+    ex = Extractor({}, "", mock=True); ex.mock = False; ex._retryable = (ConnectionError,)
+    ex.client = _FakeClient([(page(["594/624", "640/91"]), "end_turn"),
+                             (page(["640/91", "708/1"]), "end_turn"),          # 640/91 repeats across pages
+                             (page3_cut, "max_tokens")])
+    out = ex.read_runsheet(pdf, tmp_path / "pages")
+    assert len(ex.client.calls) == 3                                       # one call per page
+    assert all(c["max_tokens"] >= 32000 for c in ex.client.calls)
+    refs = [e["recording_ref"] for e in out["entries"]]
+    assert refs[:3] == ["594/624", "640/91", "708/1"] and len(refs) > 3    # merged, de-duplicated, salvage kept
+    assert out["runsheet_kind"] == "name"
+    assert out["_partial"] and "page/part 3" in out["_partial"][0]
+
+
+def test_name_runsheet_flags_only_name_search_hits():
+    from titlepilot.intake import Intake
+    from titlepilot.rules import Ctx, run_rules
+    from titlepilot.chain import build_chain
+    intake = Intake(tract_id="T", owners=["Grace Willis Dunagan"])
+    hits = [("812/40", "D/T"), ("900/12", "Abstract of Judgment"), ("1001/5", "FTL")]
+    others = [(f"{700 + n}/{n}", "WD") for n in range(25)]
+    intake.runsheet_entries = [{**_entry(r, t), "_kind": "name", "_names": "Grace Willis Dunagan"}
+                               for r, t in hits + others]
+    flags, _ = run_rules(load_config(CONFIG).rules, Ctx([], build_chain([]), intake))
+    pk02 = [f.message for f in flags if f.rule_id == "PK02"]
+    assert len(pk02) == 4                                          # 3 hits + 1 summary line, not 28 flags
+    assert sum("Name search hit" in m for m in pk02) == 3
+    assert any(m.startswith("25 other instruments") for m in pk02)

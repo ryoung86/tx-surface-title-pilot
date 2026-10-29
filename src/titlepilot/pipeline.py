@@ -41,6 +41,9 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
             db.event(run_id, "runsheet_failed", f"{rs_path.name}: {e}")
             log(f"  Runsheet {rs_path.name} could not be read: {e}")
             continue
+        for note in rs.get("_partial", []):
+            problems.append(f"Runsheet {rs_path.name}, {note}")
+            log(f"  Runsheet {rs_path.name}, {note}")
         kind = rs.get("runsheet_kind") or "tract"
         names = [o for o in rs.get("owners_searched", []) if o]
         for e in rs.get("entries", []):
