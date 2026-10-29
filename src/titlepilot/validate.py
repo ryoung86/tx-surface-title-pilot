@@ -175,6 +175,7 @@ def normalize(record: dict, doc) -> dict:
         "easements": as_text(val(record, "easements")),
         "liens": as_text(val(record, "liens")),
         "notes": as_text(val(record, "notes")),
+        "restrictions": as_text(val(record, "restrictions")),
         "county": as_text(val(record, "county")),
         "found_by": doc.found_by,
         "record": record,

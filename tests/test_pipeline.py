@@ -412,7 +412,7 @@ class _FakeClient:
 
 
 def _entry(ref, t="WD", g1="Grace Willis Dunagan", g2="Someone"):
-    return {"recording_ref": ref, "instrument_type": t, "filing_date": "", "grantor": g1, "grantee": g2}
+    return {"recording_ref": ref, "instrument_type": t, "filing_date": "", "grantor": g1, "grantee": g2, "legal": ""}
 
 
 def test_salvage_keeps_complete_entries_from_cut_off_reply():
@@ -507,3 +507,22 @@ def test_title_report_in_seg_format(sample, tmp_path):
     assert "1980000123" not in (enc["B44"].value or "")                             # released deed of trust
     assert enc["B29"].value == "None"                                               # pipeline isn't a road
     assert any("TS03" == r[0].value for r in wb["AI Flags"].iter_rows(min_row=2))
+
+
+def test_name_runsheet_entry_on_tract_abstract_is_listed():
+    from titlepilot.intake import Intake
+    from titlepilot.rules import Ctx, run_rules
+    from titlepilot.chain import build_chain
+    intake = Intake(tract_id="T", owners=["James A. Dunagan, III"],
+                    legal_description="4.60 acres in the I & G N Railroad Company Survey #4, Abstract 289, Liberty County")
+    intake.runsheet_entries = [
+        {**_entry("2018003814", "Waiver"), "legal": "Abstract: 289 Survey: I & G N RR CO SURVEY Acres: 1.00",
+         "_kind": "name", "_names": "James A. Dunagan, III"},
+        {**_entry("2009003727", "Affidavit"), "legal": "SEE INSTRUMENT", "_kind": "name", "_names": "James A. Dunagan, III"},
+        {**_entry("953/351", "Lease"), "legal": "Survey: I & GN SURVEY SECTION #6 ABSTRACT #293",
+         "_kind": "name", "_names": "James A. Dunagan, III"},
+    ]
+    flags, _ = run_rules(load_config(CONFIG).rules, Ctx([], build_chain([]), intake))
+    pk02 = [f.message for f in flags if f.rule_id == "PK02"]
+    assert any("2018003814" in m and "this tract's abstract (A-289)" in m for m in pk02)
+    assert any(m.startswith("2 other instruments") for m in pk02)

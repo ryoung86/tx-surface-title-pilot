@@ -43,8 +43,9 @@ RUNSHEET_SCHEMA = {
                     "filing_date": {"type": "string"},
                     "grantor": {"type": "string"},
                     "grantee": {"type": "string"},
+                    "legal": {"type": "string", "description": "Legal description or survey/abstract, as shown"},
                 },
-                "required": ["recording_ref", "instrument_type", "filing_date", "grantor", "grantee"],
+                "required": ["recording_ref", "instrument_type", "filing_date", "grantor", "grantee", "legal"],
                 "additionalProperties": False,
             },
         },
@@ -56,7 +57,8 @@ RUNSHEET_SCHEMA = {
 RUNSHEET_PROMPT = """This is a title agent's runsheet (document index) for a tract of land in Texas.
 
 - In entries, list every recorded instrument it shows, one per line item, copying the recording reference
-  (volume/page or instrument number), type, filing date, grantor and grantee as written. Use "" for anything not shown.
+  (volume/page or instrument number), type, filing date, grantor, grantee and legal description (survey,
+  abstract, acres) as written. Use "" for anything not shown.
   Keep each value short: the first grantor and first grantee only, no "et al" lists or legal descriptions.
 - In owners_searched, list the names the runsheet says were searched by name (for liens, judgments and the like).
   Use an empty list if it doesn't say. Do not guess from the grantor and grantee columns.
@@ -96,7 +98,7 @@ def salvage_runsheet(text: str) -> dict:
             continue
         if isinstance(e, dict) and e.get("recording_ref"):
             out["entries"].append({k: str(e.get(k, "")) for k in
-                                   ("recording_ref", "instrument_type", "filing_date", "grantor", "grantee")})
+                                   ("recording_ref", "instrument_type", "filing_date", "grantor", "grantee", "legal")})
     return out
 
 

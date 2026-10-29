@@ -222,6 +222,17 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     leases = [e for e in current if e["category"] == "surface agreement"]
     other = [e for e in current if e not in mortgages + roads + rails + leases]
 
+    # Burdens created inside conveyances: reserved easements and deed restrictions (rights of first
+    # refusal, use covenants). They aren't separate instruments, so they're listed as text lines.
+    deed_lines_roads, deed_lines_other = [], []
+    for c in chain["conveyances"]:
+        tag = f"{abbrev(c['type'])} - {record_type(c)} {display_ref(c)}, dated {fmt_date(c.get('execution_date') or c['filing_date'])}"
+        if c.get("easements"):
+            line = f"{tag} - reserved: {c['easements']}"
+            (deed_lines_roads if "road" in c["easements"].lower() else deed_lines_other).append(line)
+        if c.get("restrictions"):
+            deed_lines_other.append(f"{tag} - {c['restrictions']}")
+
     for n, e in enumerate(leases[:9]):
         for c, v in zip("BCDEFGHI", [abbrev(e["type"]), names(e["grantors"]), names(e["grantees"]),
                                      as_date(e.get("execution_date") or e["filing_date"]), None, display_ref(e),
@@ -236,11 +247,13 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     if not mortgages:
         ws["C18"] = "None"
     other += mortgages[3:] + leases[9:]
+    extra = {"B29": deed_lines_roads, "B44": deed_lines_other}
     for cell, items in (("B24", []), ("B29", roads), ("B34", rails), ("B39", []), ("B44", other)):
-        ws[cell] = "\n".join(text(e) for e in items) if items else "None"
+        lines = [text(e) for e in items] + extra.get(cell, [])
+        ws[cell] = "\n".join(lines) if lines else "None"
         ws[cell].alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
-        lines = max(1, sum(1 + len(text(e)) // 110 for e in items))
-        ws.row_dimensions[ws[cell].row].height = max(ws.row_dimensions[ws[cell].row].height or 15, 15 * lines)
+        n = max(1, sum(1 + len(t) // 110 for t in lines))
+        ws.row_dimensions[ws[cell].row].height = max(ws.row_dimensions[ws[cell].row].height or 15, 15 * n)
 
     _fit_width(ws)
 

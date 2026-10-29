@@ -139,12 +139,29 @@ def name_search_hit(itype) -> bool:
     return classify(t) in ("lien", "judgment") or re.sub(r"[\s./]", "", t) in _NAME_HIT_ABBR
 
 
+_ABS = re.compile(r"\b(?:abstract|abst|abs)\.?\s*(?:no\.?|number|#)?\s*:?\s*A?-?\s*(\d{1,5})\b|\bA-\s?(\d{1,5})\b", re.I)
+
+
+def abstracts_in(text) -> set:
+    return {a or b for a, b in _ABS.findall(str(text or ""))}
+
+
+def on_abstract(legal, abstracts) -> bool:
+    return bool(abstracts_in(legal) & abstracts)
+
+
+def tract_abstracts(ctx) -> set:
+    """The tract's abstract number(s), from its legal description (tracts.csv / intake form)."""
+    return abstracts_in(getattr(ctx.intake, "legal_description", None))
+
+
 @rule("PK02")
 def runsheet_entry_not_uploaded(ctx, params):
     """Tract runsheet entries should all be in the package. A name runsheet lists everything recorded
     under a person's name, mostly on other land: only liens, judgments and similar hits are listed
     one by one for review; the rest are summarized in one line."""
     have = set().union(*(i["ref_keys"] for i in ctx.instruments)) if ctx.instruments else set()
+    abstracts = tract_abstracts(ctx)
     other_by_names = {}
     for e in getattr(ctx.intake, "runsheet_entries", None) or []:
         key = norm_ref(e.get("recording_ref"))
@@ -153,6 +170,9 @@ def runsheet_entry_not_uploaded(ctx, params):
         what = f"{e.get('recording_ref')} ({e.get('instrument_type') or 'type not shown'})"
         if e.get("_kind") != "name":
             yield None, f"On the agent's runsheet but not uploaded: {what}"
+        elif abstracts and on_abstract(e.get("legal"), abstracts):
+            yield None, (f"On this tract's abstract (A-{'/'.join(sorted(abstracts))}) but not in the package: {what}, "
+                         f"{e.get('grantor') or '?'}. Pull it and confirm whether it affects this tract")
         elif name_search_hit(e.get("instrument_type")):
             yield None, (f"Name search hit for {e.get('_names') or 'an owner'} not in the package: {what}, "
                          f"{e.get('grantor') or '?'} to {e.get('grantee') or '?'}. Confirm whether it affects this tract")
