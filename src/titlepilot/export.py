@@ -1,0 +1,58 @@
+"""Write the review workbook a landman works from (pilot stand-in for the review screen)."""
+from pathlib import Path
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill
+
+HEAD = PatternFill("solid", fgColor="1F3A5F")
+SEVERITY_FILL = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7"}
+
+
+def _table(ws, headers, rows, widths=None):
+    ws.append(headers)
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = HEAD
+    for r in rows:
+        ws.append([", ".join(v) if isinstance(v, list) else v for v in r])
+    for i, w in enumerate(widths or [], 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+
+
+def export_review(path, intake, run_id, chain, flags, skipped, problems) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+    ws.title = "Summary"
+    for k, v in [("Run", run_id), ("Tract", intake.tract_id), ("County", intake.county),
+                 ("Legal description", intake.legal_description), ("Title agent", intake.agent),
+                 ("Current surface owner", ", ".join(chain["current_owner"]) or "NOT FOUND"),
+                 ("Vesting instrument", chain["vesting_instrument"]),
+                 ("Open encumbrances", sum(e["status"] == "open" for e in chain["encumbrances"])),
+                 ("Flags", len(flags)),
+                 ("Rules not yet implemented (skipped)", ", ".join(skipped) or "none"),
+                 ("Package problems", "; ".join(problems) or "none")]:
+        ws.append([k, v])
+    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["B"].width = 80
+
+    _table(wb.create_sheet("Chain"), ["Filing date", "Type", "Instrument", "Grantors", "Grantees", "File"],
+           [[i["filing_date"], i["type"], i["instrument_id"], i["grantors"], i["grantees"], i["file_name"]]
+            for i in chain["instruments"]], [12, 24, 22, 32, 32, 30])
+    _table(wb.create_sheet("Encumbrances"), ["Filing date", "Type", "Instrument", "Holder / grantee", "Status"],
+           [[e["filing_date"], e["type"], e["instrument_id"], e["grantees"], e["status"]]
+            for e in chain["encumbrances"]], [12, 24, 22, 32, 12])
+
+    fs = wb.create_sheet("Flags")
+    _table(fs, ["Rule", "Severity", "Instrument", "Message", "Reviewer action", "Note"],
+           [[f.rule_id, f.severity, f.instrument_id, f.message, None, None] for f in flags],
+           [8, 12, 22, 70, 16, 40])
+    for row in fs.iter_rows(min_row=2):
+        color = SEVERITY_FILL.get(str(row[1].value).split()[0].lower())
+        if color:
+            row[1].fill = PatternFill("solid", fgColor=color)
+    wb.save(path)
+    return path

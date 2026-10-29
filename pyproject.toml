@@ -1,0 +1,30 @@
+[project]
+name = "titlepilot"
+version = "0.1.0"
+description = "Texas surface title extraction pilot (SEG)"
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic",
+  "pypdfium2",
+  "pillow",
+  "jsonschema",
+  "rapidfuzz",
+  "pyyaml",
+  "openpyxl",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+titlepilot = "titlepilot.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

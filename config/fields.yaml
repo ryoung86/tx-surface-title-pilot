@@ -1,0 +1,153 @@
+# Generated from TX_Surface_Fields_and_Rules.xlsx by `titlepilot import-config`.
+# Edit the workbook, not this file, except for 'enabled' and 'params'.
+fields:
+- name: instrument_id
+  group: core
+  type: text
+  description: County + volume/page or Official Public Records instrument number
+  required: true
+- name: instrument_type
+  group: core
+  type: list
+  description: Warranty, special warranty or no-warranty deed, quitclaim, deed of trust, release, vendor's lien, easement/ROW, surface use or damage agreement, surface lease, plat or replat, restriction, judgment, lien, lis pendens, tax or sheriff's deed, probate, affidavit of heirship, other
+  required: false
+- name: county
+  group: core
+  type: text
+  description: County of recording
+  required: false
+- name: volume
+  group: core
+  type: text
+  description: Recording reference as stamped
+  required: false
+- name: page
+  group: core
+  type: text
+  description: Recording reference as stamped
+  required: false
+- name: instrument_no
+  group: core
+  type: text
+  description: Recording reference as stamped
+  required: false
+- name: execution_date
+  group: core
+  type: date
+  description: As written, plus normalized copy
+  required: false
+- name: filing_date
+  group: core
+  type: date
+  description: As written, plus normalized copy
+  required: false
+- name: grantors
+  group: core
+  type: list of parties
+  description: Name as written, marital status, spouse, capacity (individual, executor, trustee, agent, corporate officer)
+  required: false
+- name: grantees
+  group: core
+  type: list of parties
+  description: Same fields as grantors
+  required: false
+- name: legal_description_text
+  group: core
+  type: text
+  description: The full description, verbatim
+  required: false
+- name: survey_name
+  group: core
+  type: text
+  description: Parsed when present
+  required: false
+- name: abstract_no
+  group: core
+  type: text
+  description: Parsed when present
+  required: false
+- name: block
+  group: core
+  type: text
+  description: Parsed when present
+  required: false
+- name: section
+  group: core
+  type: text
+  description: Parsed when present
+  required: false
+- name: acreage
+  group: core
+  type: number
+  description: As stated
+  required: false
+- name: less_and_except
+  group: core
+  type: text
+  description: Any exclusions, verbatim
+  required: false
+- name: refers_to
+  group: core
+  type: list
+  description: Prior instruments cited (amends, releases, ratifies, corrects)
+  required: false
+- name: consideration
+  group: core
+  type: text
+  description: As stated
+  required: false
+- name: notary_witnesses
+  group: core
+  type: text
+  description: Present or missing
+  required: false
+- name: notes
+  group: core
+  type: text
+  description: Anything unusual the model saw on the page
+  required: false
+- name: conveyance_type
+  group: surface
+  type: list
+  description: Warranty, special warranty, without warranty, quitclaim, tax deed, sheriff's deed
+  required: false
+- name: surface_interest
+  group: surface
+  type: text
+  description: Fee simple, undivided fraction, life estate or remainder, as written
+  required: false
+- name: mineral_exception
+  group: surface
+  type: text
+  description: Any minerals excepted or reserved from the conveyance, verbatim
+  required: false
+- name: homestead_indicators
+  group: surface
+  type: text
+  description: Homestead designation, spouse joinder or recitals
+  required: false
+- name: easements
+  group: surface
+  type: list
+  description: Type (pipeline, road, utility, access, ROW), grantee, width, location description, term, assignability
+  required: false
+- name: restrictions
+  group: surface
+  type: text
+  description: Deed restrictions, covenants and plat notes, verbatim
+  required: false
+- name: liens
+  group: surface
+  type: list
+  description: Deed of trust, vendor's lien, judgment, tax or mechanic's lien, with holder, amount and release reference
+  required: false
+- name: plat_reference
+  group: surface
+  type: text
+  description: Subdivision, lot, block, plat cabinet and slide
+  required: false
+- name: possession_notes
+  group: surface
+  type: text
+  description: Affidavits of use and possession, adverse possession recitals
+  required: false

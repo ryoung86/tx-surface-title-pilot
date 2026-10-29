@@ -1,0 +1,78 @@
+# Generated from TX_Surface_Fields_and_Rules.xlsx by `titlepilot import-config`.
+# Edit the workbook, not this file, except for 'enabled' and 'params'.
+rules:
+- id: R01
+  name: Grantor does not appear as a grantee or heir earlier in the tract's chain
+  severity: High
+  enabled: true
+- id: R06
+  name: Deed of trust, vendor's lien or other lien recorded with no matching release
+  severity: Medium
+  enabled: true
+- id: R07
+  name: Owners' surface interests in a tract add up to more or less than 100%
+  severity: High
+  enabled: true
+- id: R09
+  name: Same party's name spelled differently across instruments, below the confirmed-alias match score
+  severity: Low
+  enabled: true
+- id: R10
+  name: Acreage or legal description differs from the prior instrument for the same tract
+  severity: Medium
+  enabled: true
+- id: R11
+  name: Instrument signed by an agent, executor or corporate officer with no authority document cited
+  severity: Medium
+  enabled: true
+- id: R12
+  name: Instrument cites a prior instrument not found in the document package
+  severity: Medium
+  enabled: true
+- id: R13
+  name: Any critical field returned with low confidence
+  severity: Review
+  enabled: true
+- id: T01
+  name: Homestead conveyed or encumbered without the other spouse joining
+  severity: High
+  enabled: true
+  legal_reference: Texas Family Code §5.001 (confirm with counsel)
+- id: T02
+  name: Owner died with no probate in the chain, and an affidavit of heirship is the only link
+  severity: High if recorded under 5 years, else Medium
+  enabled: true
+  legal_reference: Texas Estates Code §203.001 (confirm with counsel)
+- id: TS01
+  name: Easement or right-of-way has no locatable description (blanket easement)
+  severity: Medium
+  enabled: true
+- id: TS02
+  name: 'Easement or right-of-way crosses the project area: confirm against the survey'
+  severity: Medium
+  enabled: true
+- id: TS03
+  name: Judgment, tax lien or lis pendens recorded against an owner in the chain with no release
+  severity: High
+  enabled: true
+- id: TS04
+  name: Deed restrictions or plat notes limit commercial, industrial or pipeline use
+  severity: Medium
+  enabled: true
+- id: TS05
+  name: 'Tax or sheriff''s deed in the chain: confirm the redemption period has run'
+  severity: Medium
+  enabled: true
+- id: TS06
+  name: Quitclaim or no-warranty deed in the chain
+  severity: Low
+  enabled: true
+- id: TS07
+  name: 'Mineral exception or reservation found: estates are severed, route the tract to a mineral run'
+  severity: Review
+  enabled: true
+- id: PK01
+  name: Owner in the chain was not listed as name-searched on the intake form
+  severity: High
+  enabled: true
+  source: code
