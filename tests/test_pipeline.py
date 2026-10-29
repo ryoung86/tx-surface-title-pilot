@@ -486,3 +486,24 @@ def test_unreadable_deed_acreage_is_flagged():
                       ["Alvaro Banda, Jr."], None, "all"))          # acreage not read
     chain = build_chain(docs, subject_acres=4.6)
     assert any("Acreage could not be read" in m for _, m in chain["ownership_notes"])
+
+
+def test_title_report_in_seg_format(sample, tmp_path):
+    import openpyxl
+    db = DB(tmp_path / "runs.sqlite")
+    res = run_tract(sample / TRACT, load_config(CONFIG), db, tmp_path / "out", mock=True, log=lambda *_: None)
+    wb = openpyxl.load_workbook(res["report"])
+    assert wb.sheetnames == ["Ownership ", "Ownership BT Data", "Encumbrances", "Flowchart", "Names Examined",
+                             "Index to All Documents", "Runsheet ", "AI Review", "AI Flags", "AI Supporting Docs"]
+    own = wb["Ownership "]
+    assert own["C14"].value == TRACT and own["B11"].value == "Smith Ranch LLC"
+    assert own["B1"].value == "Schoeffler Energy Group, Inc."                # template boilerplate kept
+    assert own["C28"].value == "1994003300"                                   # vesting deed, SEG style
+    rs = wb["Runsheet "]
+    assert [rs.cell(13, c).value for c in (1, 2, 3)] == [1, "1978001001", "WD"]
+    assert rs.cell(18, 2).value == "2005000777" and rs.cell(19, 2).value is None
+    enc = wb["Encumbrances"]
+    assert "2001004410" in enc["B44"].value and "Acme Supply" in enc["B44"].value   # open judgment
+    assert "1980000123" not in (enc["B44"].value or "")                             # released deed of trust
+    assert enc["B29"].value == "None"                                               # pipeline isn't a road
+    assert any("TS03" == r[0].value for r in wb["AI Flags"].iter_rows(min_row=2))

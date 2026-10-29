@@ -7,6 +7,7 @@ from pathlib import Path
 from .chain import build_chain
 from .extract import DEFAULT_MODEL, Extractor
 from .export import export_review
+from .report import write_report
 from .intake import acres_in, check_package, find_tract_list, load_package, load_tract_list
 from .pages import to_pages
 from .rules import Ctx, run_rules
@@ -62,6 +63,11 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
         log(f"  {tract_list} has no row for tract ID '{intake.tract_id}' (check the tract_id column)")
     intake.county = intake.county or listed.get("county") or None
     intake.legal_description = intake.legal_description or listed.get("legal_description") or None
+    intake.aoi = listed.get("aoi") or None
+    intake.agent = intake.agent or listed.get("researcher") or None
+    researched = None
+    if listed.get("researched_from") and listed.get("researched_to"):
+        researched = (norm_date(listed["researched_from"]), norm_date(listed["researched_to"]))
     acres_sources = [(str(tract_list), acres_in(f"{listed.get('acreage')} acres") if listed.get("acreage") else None),
                      ("intake form", acres_in(intake.legal_description)), ("tract runsheet", runsheet_acres)]
     acres_source = next(((src, a) for src, a in acres_sources if a), (None, None))
@@ -87,6 +93,7 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
             continue
         errors = schema_errors(record, cfg.schema)
         norm = normalize(record, doc)
+        norm["pages"] = len(pages)
         db.add_instrument(run_id, norm, record, errors)
         if errors:
             db.event(run_id, "schema_errors", f"{doc.file_name}: {len(errors)}")
@@ -120,6 +127,8 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
     db.event(run_id, "rules_run", json.dumps({"flags": len(flags), "skipped": skipped}))
 
     review = export_review(work / f"{intake.tract_id}_review.xlsx", intake, run_id, chain, flags, skipped, problems)
-    db.event(run_id, "ready_for_review", str(review))
+    report = write_report(work / f"{intake.tract_id}_title_report.xlsx", intake, chain, flags, skipped, problems,
+                          run_id, researched)
+    db.event(run_id, "ready_for_review", json.dumps({"review": str(review), "report": str(report)}))
     return {"run_id": run_id, "tract_id": intake.tract_id, "instruments": len(instruments),
-            "chain": chain, "flags": flags, "skipped": skipped, "review": review}
+            "chain": chain, "flags": flags, "skipped": skipped, "review": review, "report": report}

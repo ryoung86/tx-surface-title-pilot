@@ -33,7 +33,9 @@ The sample tract is invented: a 1978 deed, a deed of trust and its release, an u
    Only Starter and Approved rows are imported. `enabled` and `params` in `rules.yaml` are kept across imports.
 2. **Receive a package.** One folder per tract, named with the tract ID, holding the documents. See "What the title agent delivers" below.
 3. **Run.** `titlepilot run path/to/TX-REEVES-014` (or `run-all path/to/parent`). With an intake workbook, the package check runs first and problems go back to the agent unless `--force` is used.
-4. **Review.** Open `output/<tract>/run_<n>/<tract>_review.xlsx`: Summary, Chain, Encumbrances and Flags. This stands in for the review screen during the pilot.
+4. **Review.** Each run writes two workbooks to `output/<tract>/run_<n>/`:
+   - `<tract>_title_report.xlsx`: the title report in SEG's format (Ownership, Ownership BT Data, Encumbrances, Flowchart, Names Examined, Index to All Documents, Runsheet), plus AI Review, AI Flags and AI Supporting Docs sheets at the end. It's a draft for a landman to check and sign.
+   - `<tract>_review.xlsx`: the plainer working view (Summary, Chain, Encumbrances, Flags).
 5. **Score (pilot only).** Put the verified results in an answer key folder and run `titlepilot score path/to/answer_key`.
 
 ## What the title agent delivers
@@ -65,6 +67,10 @@ The acreage matters: it is how the code tells an out-sale (a deed covering part 
 
 The current owner is the grantee of the latest conveyance that covers the whole tract and conveys the full interest. Conveyances after it that cover less land than the tract (out-sales) or convey an undivided fraction (for example "an undivided 5% of the surface") don't replace the owner; they raise OW01 so a landman confirms. Fractional ownership is not yet totaled (R07).
 
+## The title report template
+
+`src/titlepilot/templates/surface_title_report.xlsx` is a blank copy of a completed SEG report with the tract's data cleared. To refresh it from a newer report: `python tools/make_report_template.py "path/to/report.xlsx"`. The tracts.csv columns `aoi`, `researcher`, `researched_from` and `researched_to` fill those header fields when present. Not carried over: the Runsheet's header logo (it was the title vendor's) and the hand-drawn Flowchart shapes, which are replaced by a chain drawn in cells. On the Index and Runsheet, a red file date is earlier than the effective date.
+
 ## Layout
 
 ```
@@ -80,6 +86,7 @@ src/titlepilot/
   rules.py         rules engine; one Python check per rule ID
   db.py            SQLite run history, append-only by trigger
   export.py        review workbook
+  report.py        title report in SEG's format, from templates/surface_title_report.xlsx
   score.py         compare against an answer key
   pipeline.py      one tract end to end
   cli.py           commands

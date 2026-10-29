@@ -82,6 +82,7 @@ def main(argv=None):
                     print(f"    [{f.rule_id} {f.severity}] {f.instrument_id or '-'}: {f.message}")
                 if res["skipped"]:
                     print(f"  rules with no check yet: {', '.join(res['skipped'])}")
+                print(f"  title report:    {res['report']}")
                 print(f"  review workbook: {res['review']}")
         return
 
