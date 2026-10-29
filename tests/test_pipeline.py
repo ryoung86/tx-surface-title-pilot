@@ -128,3 +128,47 @@ def test_sample_pdfs_show_release_reference_and_exception(sample):
     assert rel["refers_to"]["value"] == ["OPR 1980-000123"]
     assert "SAVE AND EXCEPT" in deed["mineral_exception"]["value"]
     assert len(pdfium.PdfDocument(str(sample / TRACT / "SAMPLE_1994-003300.pdf"))) == 1
+
+
+@pytest.mark.parametrize("raw,category", [
+    ("easement/row", "easement"), ("Easement / ROW", "easement"), ("Pipeline Right-of-Way Easement", "easement"),
+    ("judgment", "judgment"), ("Abstract of Judgment", "judgment"), ("Lis Pendens", "judgment"),
+    ("Deed of Trust", "lien"), ("Vendor's Lien", "lien"), ("Release of Lien", "release"), ("Partial Release", "release"),
+    ("Warranty Deed", "conveyance"), ("Special Warranty Deed", "conveyance"), ("Quitclaim Deed", "conveyance"),
+    ("Affidavit of Heirship", "conveyance"), ("Deed", "conveyance"), ("Plat", "other"), ("", "unknown"),
+])
+def test_instrument_type_categories(raw, category):
+    from titlepilot.chain import classify
+    from titlepilot.validate import norm_type
+    assert classify(norm_type(raw)) == category
+
+
+def test_live_run_4_types_and_holders():
+    """Reproduces what the first live run returned: 'easement/row' was dropped from
+    encumbrances and the judgment showed the debtor as holder."""
+    from titlepilot.chain import build_chain
+    from titlepilot.intake import DocRow
+    from titlepilot.validate import normalize
+
+    def rec(iid, itype, date, grantor, grantee, refers=()):
+        f = lambda v: {"value": v, "source_text": "", "confidence": "high"}
+        p = lambda n: [{"name": n, "marital_status": "", "spouse": "", "capacity": ""}]
+        return normalize({"instrument_id": f(iid), "instrument_type": f([itype]), "filing_date": f(date),
+                          "grantors": f(p(grantor)), "grantees": f(p(grantee)), "refers_to": f(list(refers))},
+                         DocRow(file_name=iid + ".pdf"))
+
+    chain = build_chain([
+        rec("OPR 1978-001001", "warranty deed", "04/12/1978", "Mary Doe", "John A. Smith"),
+        rec("Sample County, OPR 1980-000123", "deed of trust", "02/01/1980", "John A. Smith", "First State Bank"),
+        rec("OPR 1994-003300", "warranty deed", "08/15/1994", "John A. Smith", "Smith Ranch LLC"),
+        rec("Sample County, Texas OPR 2001-004410", "judgment", "06/02/2001", "Acme Supply Co.", "John A. Smith"),
+        rec("OPR 2004-002210", "release", "05/10/2004", "First State Bank", "John A. Smith", ["OPR 1980-000123"]),
+        rec("Sample County OPR 2005-000777", "easement/row", "09/20/2005", "Smith Ranch LLC", "Pecos Pipeline Co."),
+    ])
+    enc = {e["instrument_id"]: e for e in chain["encumbrances"]}
+    assert enc["Sample County OPR 2005-000777"]["holder"] == ["Pecos Pipeline Co."]
+    assert enc["Sample County, Texas OPR 2001-004410"]["holder"] == ["Acme Supply Co."]
+    assert enc["Sample County, OPR 1980-000123"]["holder"] == ["First State Bank"]
+    assert enc["Sample County, OPR 1980-000123"]["status"] == "released"
+    assert chain["current_owner"] == ["Smith Ranch LLC"]
+    assert chain["unclassified"] == []

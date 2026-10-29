@@ -14,12 +14,8 @@ from dataclasses import dataclass
 
 from .fuzzy import token_sort_ratio
 
-from .chain import is_release
 from .validate import as_text, conf, val
 
-LIEN_TYPES = {"deed of trust", "vendor's lien", "lien", "mechanic's lien"}
-JUDGMENT_TYPES = {"abstract of judgment", "judgment", "lis pendens", "tax lien"}
-NO_WARRANTY = {"quitclaim deed", "deed without warranty"}
 DEFAULT_CRITICAL = ["instrument_id", "instrument_type", "filing_date", "grantors", "grantees", "legal_description_text"]
 
 REGISTRY = {}
@@ -52,7 +48,7 @@ def _same(a: str, b: str, cutoff=88) -> bool:
 
 
 def _released(ctx):
-    return {r for i in ctx.instruments if is_release(i["type"]) for r in i["refers_to"]}
+    return {r for i in ctx.instruments if i["category"] == "release" for r in i["refers_to"]}
 
 
 @rule("R01")
@@ -70,7 +66,7 @@ def grantor_not_in_chain(ctx, params):
 def unreleased_lien(ctx, params):
     released = _released(ctx)
     for i in ctx.instruments:
-        if i["type"] in LIEN_TYPES and not i["ref_keys"] & released:
+        if i["category"] == "lien" and not i["ref_keys"] & released:
             yield i["instrument_id"], f"{i['type'].capitalize()} has no recorded release in the package"
 
 
@@ -95,7 +91,7 @@ def low_confidence(ctx, params):
 def unreleased_judgment(ctx, params):
     released = _released(ctx)
     for i in ctx.instruments:
-        if i["type"] in JUDGMENT_TYPES and not i["ref_keys"] & released:
+        if i["category"] == "judgment" and not i["ref_keys"] & released:
             yield i["instrument_id"], f"{i['type'].capitalize()} has no recorded release in the package"
 
 
@@ -103,7 +99,7 @@ def unreleased_judgment(ctx, params):
 def no_warranty_deed(ctx, params):
     for i in ctx.instruments:
         ct = (as_text(val(i["record"], "conveyance_type")) or "").lower()
-        if i["type"] in NO_WARRANTY or "quitclaim" in ct or "without warranty" in ct:
+        if "quitclaim" in i["type"] or "without warranty" in i["type"] or "quitclaim" in ct or "without warranty" in ct:
             yield i["instrument_id"], "Quitclaim or no-warranty deed in the chain"
 
 

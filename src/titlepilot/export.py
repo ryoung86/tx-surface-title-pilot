@@ -33,6 +33,7 @@ def export_review(path, intake, run_id, chain, flags, skipped, problems) -> Path
                  ("Vesting instrument", chain["vesting_instrument"]),
                  ("Open encumbrances", sum(e["status"] == "open" for e in chain["encumbrances"])),
                  ("Flags", len(flags)),
+                 ("Instruments with an unrecognized type", ", ".join(chain["unclassified"]) or "none"),
                  ("Rules not yet implemented (skipped)", ", ".join(skipped) or "none"),
                  ("Package problems", "; ".join(problems) or "none")]:
         ws.append([k, v])
@@ -42,8 +43,8 @@ def export_review(path, intake, run_id, chain, flags, skipped, problems) -> Path
     _table(wb.create_sheet("Chain"), ["Filing date", "Type", "Instrument", "Grantors", "Grantees", "File"],
            [[i["filing_date"], i["type"], i["instrument_id"], i["grantors"], i["grantees"], i["file_name"]]
             for i in chain["instruments"]], [12, 24, 22, 32, 32, 30])
-    _table(wb.create_sheet("Encumbrances"), ["Filing date", "Type", "Instrument", "Holder / grantee", "Status"],
-           [[e["filing_date"], e["type"], e["instrument_id"], e["grantees"], e["status"]]
+    _table(wb.create_sheet("Encumbrances"), ["Filing date", "Type", "Instrument", "Holder", "Status"],
+           [[e["filing_date"], e["type"], e["instrument_id"], e["holder"], e["status"]]
             for e in chain["encumbrances"]], [12, 24, 22, 32, 12])
 
     fs = wb.create_sheet("Flags")

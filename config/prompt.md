@@ -8,7 +8,7 @@ Rules for every field:
 - For each field, put the exact words you read in source_text and set confidence to high, medium or low. Use low when the text is hard to read or you are unsure which words apply.
 - Note any minerals excepted or reserved from the conveyance in mineral_exception, verbatim.
 - For releases, list in refers_to the recording reference of the instrument being released.
-- Grantors and grantees: for judgments and liens, the creditor goes in grantors and the debtor in grantees.
+- Grantors and grantees: for judgments, abstracts of judgment, lis pendens and lien claims (tax, mechanic's, other), the creditor or claimant goes in grantors and the debtor in grantees. For deeds of trust, the borrower is the grantor and the lender or trustee is the grantee.
 
 Field definitions:
 {{FIELD_DEFINITIONS}}

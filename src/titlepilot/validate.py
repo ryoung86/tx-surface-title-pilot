@@ -74,7 +74,11 @@ def norm_ref(s) -> str:
 
 
 def norm_type(s) -> str:
-    return re.sub(r"\s+", " ", str(s).strip().lower()) if s else ""
+    """Lower-case, single spaces, and spaces around slashes: 'Easement/ROW' -> 'easement / row'."""
+    if not s:
+        return ""
+    s = re.sub(r"\s*/\s*", " / ", str(s).strip().lower())
+    return re.sub(r"\s+", " ", s)
 
 
 def party_names(v) -> list[str]:
@@ -83,12 +87,16 @@ def party_names(v) -> list[str]:
 
 def normalize(record: dict, doc) -> dict:
     """doc is the intake DocRow for this file."""
+    from .chain import classify
+
     iid = val(record, "instrument_id") or doc.recording_ref or doc.file_name
+    itype = norm_type(as_text(val(record, "instrument_type")) or doc.instrument_type)
     return {
         "instrument_id": iid,
         "ref_keys": {k for k in (norm_ref(iid), norm_ref(doc.recording_ref)) if k},
         "file_name": doc.file_name,
-        "type": norm_type(as_text(val(record, "instrument_type")) or doc.instrument_type),
+        "type": itype,
+        "category": classify(itype),
         "filing_date": norm_date(val(record, "filing_date")) or norm_date(doc.filing_date),
         "grantors": party_names(val(record, "grantors")),
         "grantees": party_names(val(record, "grantees")),
