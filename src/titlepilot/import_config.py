@@ -28,6 +28,13 @@ CODE_RULES = [
         "source": "code",
     },
     {
+        "id": "OW01",
+        "name": "Current owner needs review (out-sale, undivided interest, or tract acreage unknown)",
+        "severity": "High",
+        "enabled": True,
+        "source": "code",
+    },
+    {
         "id": "PK03",
         "name": "Uploaded document is not on the agent's runsheet",
         "severity": "Low",

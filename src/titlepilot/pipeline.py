@@ -1,15 +1,16 @@
 """Run one tract folder end to end."""
 import json
 import time
+from collections import Counter
 from pathlib import Path
 
 from .chain import build_chain
 from .extract import DEFAULT_MODEL, Extractor
 from .export import export_review
-from .intake import check_package, load_package
+from .intake import acres_in, check_package, load_package, load_tract_list
 from .pages import to_pages
 from .rules import Ctx, run_rules
-from .validate import normalize, schema_errors
+from .validate import norm_date, norm_ref, normalize, schema_errors
 
 
 def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL, force=False, log=print):
@@ -31,19 +32,38 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
     extractor = Extractor(cfg.schema, cfg.prompt, model=model, mock=mock)
     work = Path(out_dir) / intake.tract_id / f"run_{run_id}"
 
-    if intake.runsheet_path:
+    runsheet_acres = None
+    for n, rs_path in enumerate(intake.runsheet_paths or ([intake.runsheet_path] if intake.runsheet_path else [])):
         try:
-            rs = extractor.read_runsheet(intake.runsheet_path, work / "pages" / "_runsheet")
-            intake.runsheet_entries = rs.get("entries", [])
-            if not intake.owners:
-                intake.owners = [o for o in rs.get("owners_searched", []) if o]
-            db.add_output(run_id, "runsheet", rs)
-            log(f"  Runsheet: {len(intake.runsheet_entries)} instruments listed, "
-                f"{len(intake.owners)} owners shown as name-searched")
+            rs = extractor.read_runsheet(rs_path, work / "pages" / f"_runsheet{n}")
         except Exception as e:
-            problems.append(f"Runsheet {intake.runsheet_path.name} could not be read: {e}")
-            db.event(run_id, "runsheet_failed", str(e))
-            log(f"  Runsheet could not be read: {e}")
+            problems.append(f"Runsheet {rs_path.name} could not be read: {e}")
+            db.event(run_id, "runsheet_failed", f"{rs_path.name}: {e}")
+            log(f"  Runsheet {rs_path.name} could not be read: {e}")
+            continue
+        kind = rs.get("runsheet_kind") or "tract"
+        names = [o for o in rs.get("owners_searched", []) if o]
+        for e in rs.get("entries", []):
+            intake.runsheet_entries.append({**e, "_kind": kind, "_names": ", ".join(names), "_file": rs_path.name})
+        intake.owners += [o for o in names if o not in intake.owners]
+        if kind == "tract":
+            runsheet_acres = runsheet_acres or acres_in(rs.get("subject_acreage")) or acres_in(rs.get("subject_description"))
+        db.add_output(run_id, f"runsheet:{rs_path.name}", rs)
+        log(f"  Runsheet {rs_path.name} ({kind} runsheet): {len(rs.get('entries', []))} instruments listed"
+            + (f", names searched: {', '.join(names)}" if names else ""))
+
+    # The tract's acreage lets out-sales be told apart from conveyances of the whole tract.
+    listed = load_tract_list(folder.parent / "tracts.csv").get(intake.tract_id, {})
+    intake.county = intake.county or listed.get("county") or None
+    intake.legal_description = intake.legal_description or listed.get("legal_description") or None
+    acres_sources = [("tracts.csv", acres_in(f"{listed.get('acreage')} acres") if listed.get("acreage") else None),
+                     ("intake form", acres_in(intake.legal_description)), ("tract runsheet", runsheet_acres)]
+    acres_source = next(((src, a) for src, a in acres_sources if a), (None, None))
+    intake.subject_acres = acres_source[1]
+    if intake.subject_acres:
+        log(f"  Tract acreage: {intake.subject_acres:g} ac (from {acres_source[0]})")
+    else:
+        log("  Tract acreage: unknown (add it to tracts.csv so out-sales can be handled)")
 
     instruments = []
     docs = [d for d in intake.documents if (folder / d.file_name).exists()]
@@ -69,12 +89,26 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
             notes.append("needed a correction round")
         if errors:
             notes.append(f"{len(errors)} schema problems")
-        log(f"  [{n}/{len(docs)}] {doc.file_name}: {norm['type'] or 'unknown type'}, "
+        what = norm['type'] or 'unknown type' if norm["recorded"] else f"{norm['kind']} (not a recorded instrument)"
+        log(f"  [{n}/{len(docs)}] {doc.file_name}: {what}, "
             f"{len(pages)} page(s), {time.monotonic() - started:.0f}s" + (f" ({'; '.join(notes)})" if notes else ""))
 
-    chain = build_chain(instruments)
+    # Dates the AI couldn't read can come from the agent's runsheet.
+    by_ref = {norm_ref(e.get("recording_ref")): e for e in intake.runsheet_entries if e.get("recording_ref")}
+    for i in instruments:
+        if not i["filing_date"]:
+            e = next((by_ref[k] for k in i["ref_keys"] if k in by_ref), None)
+            if e and norm_date(e.get("filing_date")):
+                i["filing_date"] = norm_date(e.get("filing_date"))
+                i["date_from_runsheet"] = True
+    if not intake.county:
+        counties = [c for c in (i.get("county") for i in instruments if i.get("recorded")) if c]
+        intake.county = Counter(c.title() for c in counties).most_common(1)[0][0] if counties else None
+
+    chain = build_chain(instruments, intake.subject_acres)
     db.add_output(run_id, "chain", chain)
-    flags, skipped = run_rules(cfg.rules, Ctx(instruments, chain, intake))
+    recorded = [i for i in instruments if i.get("recorded", True)]
+    flags, skipped = run_rules(cfg.rules, Ctx(recorded, chain, intake))
     db.add_flags(run_id, flags)
     db.event(run_id, "rules_run", json.dumps({"flags": len(flags), "skipped": skipped}))
 

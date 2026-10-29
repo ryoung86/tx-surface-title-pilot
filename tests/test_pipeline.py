@@ -113,6 +113,10 @@ def test_parse_json_tolerates_fences_and_text():
     ("Vol. 412, p. 88", "V412P88"),
     ("Volume 412 Page 088", "V412P88"),
     ("CABINET A SLIDE 12", "CABINETASLIDE12"),
+    # Liberty County formats from the CCS.TX.SDY.0143 title
+    ("708/1", "V708P1"), ("Esmt. 708/1", "V708P1"), ("Vol. 708, Pg. 1", "V708P1"),
+    ("2012012111", "2012-12111"), ("OPR 2012012111", "2012-12111"), ("2012-012111", "2012-12111"),
+    ("1104/334", "V1104P334"),
 ])
 def test_recording_reference_keys(raw, key):
     from titlepilot.validate import norm_ref
@@ -136,6 +140,7 @@ def test_sample_pdfs_show_release_reference_and_exception(sample):
     ("Deed of Trust", "lien"), ("Vendor's Lien", "lien"), ("Release of Lien", "release"), ("Partial Release", "release"),
     ("Warranty Deed", "conveyance"), ("Special Warranty Deed", "conveyance"), ("Quitclaim Deed", "conveyance"),
     ("Affidavit of Heirship", "conveyance"), ("Deed", "conveyance"), ("Plat", "other"), ("", "unknown"),
+    ("UCC Financing Statement", "lien"), ("UCC", "lien"), ("Gift Deed", "conveyance"),
 ])
 def test_instrument_type_categories(raw, category):
     from titlepilot.chain import classify
@@ -264,3 +269,117 @@ def test_documents_in_subfolders(tmp_path, mode):
     files = {i["file_name"] for i in res["chain"]["instruments"]}
     assert "Liens and Easements/Name searches/SAMPLE_2001-004410.pdf" in files
     assert not {f.rule_id for f in res["flags"]} & {"PK02", "PK03"}
+
+
+def test_ucc_holder_is_secured_party():
+    from titlepilot.chain import holder
+    ucc = {"type": "ucc financing statement", "category": "lien", "grantors": ["Alvaro Banda"], "grantees": ["ISPC"]}
+    assert holder(ucc) == ["ISPC"]
+
+
+# --- CCS.TX.SDY.0143 (Liberty County): first real tract -------------------------------------------
+# Built from the verified SEG title (6/17/2025). Reproduces what went wrong on the first live run:
+# out-sale picked as current owner, gift deeds as 'other', 1965 WD listed as an easement,
+# appraisal card / CAD map in the chain, name runsheet producing PK03 noise and missing 2018003815.
+
+def _real(iid, itype, date, grantors, grantees, acres=None, interest="", refers=(), kind="recorded instrument",
+          file=None):
+    from titlepilot.intake import DocRow
+    from titlepilot.validate import normalize
+    f = lambda v: {"value": v, "source_text": "", "confidence": "high"}
+    p = lambda names: [{"name": n, "marital_status": "", "spouse": "", "capacity": ""} for n in names]
+    rec = {"instrument_id": f(iid), "instrument_type": f(itype), "filing_date": f(date),
+           "grantors": f(p(grantors)), "grantees": f(p(grantees)), "refers_to": f(list(refers)),
+           "acreage": f(acres or ""), "surface_interest": f(interest), "document_kind": f(kind),
+           "county": f("Liberty")}
+    return normalize(rec, DocRow(file_name=file or f"{iid}.pdf"))
+
+
+DUN, GRACE, JR3 = "J. A. Dunagan", "Grace Willis Dunagan", "James A. Dunagan, III"
+GIFTS = [("640/91", "1969-01-14", "5%"), ("652/76", "1969-10-09", "5%"), ("667/443", "1970-09-03", "5%"),
+         ("674/460", "1971-02-10", "10%"), ("692/843", "1972-03-02", "5%"), ("716/233", "1973-03-12", "5%"),
+         ("734/911", "1974-03-26", "5%"), ("751/192", "1975-02-10", "5%"), ("770/903", "1976-02-24", "5%"),
+         ("795/435", "1977-03-22", "5%"), ("930/580", "1981-12-22", "14%"), ("952/267", "1982-01-14", "7%"),
+         ("1002/385", "1983-12-21", "6%"), ("1004/199", "1984-01-11", "6%"), ("1103/60", "1985-12-31", "6%"),
+         ("1104/334", "1996-01-09", "5%"), ("1241/580", "1988-08-04", "1%")]
+
+
+def _sdy0143(with_supporting=True):
+    docs = [_real("Vol. 594, Page 624", "Warranty Deed", "December 15, 1965", ["Rebecca Willis Zipp", "Martha Willis Hudson"],
+                  [GRACE, DUN], 640, "all right, title and interest, reserving minerals")]
+    docs += [_real(f"Vol. {r.split('/')[0]}, Page {r.split('/')[1]}", "Deed of Gift", d, [DUN, GRACE], [JR3], 268.2,
+                   f"an undivided {pct} of the surface only") for r, d, pct in GIFTS]
+    docs += [
+        _real("Vol. 708, Page 1", "Road Easement", "10/27/1972", ["Martha Willis Hudson", "J. T. Hudson"], [DUN, GRACE],
+              refers=["Vol. 594, Page 624", "deeds of even date herewith"]),
+        _real("Instrument No. 2011009176", "Special Warranty Deed", "2011-08-03", [JR3], ["Alvaro Banda"], 5.60,
+              "all of grantor's interest in the surface"),
+        _real("Instrument No. 2012012111", "UCC Financing Statement", "2012-09-19", ["Alvaro Banda"], ["ISPC"], 5.60),
+        _real("Instrument No. 2018003815", "Warranty Deed", "2018-02-20", ["Alvaro Banda"], ["Alvaro Banda, Jr."], 1.0,
+              "all"),
+        _real("Instrument No. 2019003905", "Correction Affidavit", "2019-02-19", ["Alvaro Banda, Jr."], [],
+              refers=["Instrument No. 2018003815"]),
+    ]
+    if with_supporting:
+        docs += [_real("", "", "", [], [], kind="tax or appraisal record", file="APPRAISAL/CCS.TX.SDY.0143_APPRAISAL CARD.pdf"),
+                 _real("", "", "", [], [], kind="map or plat", file="MAPS AND PLATS/CCS.TX.SDY.0143_CAD MAP.pdf")]
+    return docs
+
+
+def test_sdy0143_current_owner_with_tract_acreage():
+    from titlepilot.chain import build_chain
+    chain = build_chain(_sdy0143(), subject_acres=4.6)
+    assert chain["current_owner"] == ["Alvaro Banda"]
+    assert chain["vesting_instrument"] == "Instrument No. 2011009176"
+    notes = dict(chain["ownership_notes"])
+    assert "out-sale" in notes["Instrument No. 2018003815"]
+    assert chain["undated"] == []
+    assert {s["file_name"] for s in chain["supporting"]} == {
+        "APPRAISAL/CCS.TX.SDY.0143_APPRAISAL CARD.pdf", "MAPS AND PLATS/CCS.TX.SDY.0143_CAD MAP.pdf"}
+
+
+def test_sdy0143_without_acreage_flags_possible_outsale():
+    from titlepilot.chain import build_chain
+    chain = build_chain(_sdy0143(), subject_acres=None)
+    assert chain["current_owner"] == ["Alvaro Banda, Jr."]          # can't tell without the tract acreage...
+    assert any("may be an out-sale" in m for _, m in chain["ownership_notes"])   # ...so it says so
+
+
+def test_sdy0143_encumbrances_match_verified_title():
+    from titlepilot.chain import build_chain
+    chain = build_chain(_sdy0143(), subject_acres=4.6)
+    enc = {e["instrument_id"]: e for e in chain["encumbrances"]}
+    assert set(enc) == {"Vol. 708, Page 1", "Instrument No. 2012012111"}     # not the 1965 warranty deed
+    assert enc["Vol. 708, Page 1"]["status"] == "open"
+    assert enc["Instrument No. 2012012111"]["holder"] == ["ISPC"]
+    assert chain["unclassified"] == ["Instrument No. 2019003905"]          # correction affidavit: listed for review
+    gifts = [c for c in chain["conveyances"] if c["type"] == "deed of gift"]
+    assert len(gifts) == 17
+
+
+def test_sdy0143_rules_with_name_runsheet():
+    """The agent's file was a name runsheet for Alvaro Banda: no PK03 noise, 2018003815 matched,
+    the other hits under his name become review items, not 'not uploaded' errors."""
+    from titlepilot.chain import build_chain
+    from titlepilot.intake import Intake
+    from titlepilot.rules import Ctx, run_rules
+    docs = _sdy0143()
+    recorded = [d for d in docs if d["recorded"]]
+    intake = Intake(tract_id="CCS.TX.SDY.0143", mode="agent runsheet", owners=["Alvaro Banda"])
+    intake.runsheet_entries = [{"recording_ref": r, "instrument_type": t, "_kind": "name", "_names": "Alvaro Banda"}
+                               for r, t in [("2023009302", "ASSIGNMENT"), ("2020013721", "DEED OF TRUST"),
+                                            ("2019003906", "DEED OF TRUST"), ("2018008896", "AFFIDAVIT"),
+                                            ("2018003815", "WARRANTY DEED")]]
+    chain = build_chain(docs, subject_acres=4.6)
+    flags, _ = run_rules(load_config(CONFIG).rules, Ctx(recorded, chain, intake))
+    by_rule = {}
+    for f in flags:
+        by_rule.setdefault(f.rule_id, []).append(f)
+    assert "PK03" not in by_rule
+    pk02 = by_rule["PK02"]
+    assert len(pk02) == 4 and all("name runsheet" in f.message for f in pk02)
+    assert not any("2018003815" in f.message for f in pk02)
+    assert "R01" not in by_rule                                           # Dunagans acquired in 1965
+    assert [f.instrument_id for f in by_rule["OW01"]] == ["Instrument No. 2018003815"]
+    r12 = [f.message for f in by_rule.get("R12", [])]
+    assert not any("DEEDS" in m for m in r12)                              # descriptions aren't references

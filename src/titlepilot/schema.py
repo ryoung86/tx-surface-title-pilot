@@ -47,7 +47,23 @@ def field_schema(field: dict) -> dict:
     }
 
 
+# Fields the code depends on, added to every schema whether or not the workbook lists them.
+SYSTEM_FIELDS = [
+    {"name": "document_kind", "type": "text",
+     "description": "What this file is: 'recorded instrument' if it carries a county recording reference "
+                    "(volume/page or instrument number); otherwise 'map or plat', 'tax or appraisal record', "
+                    "or 'other supporting document'"},
+]
+RECORDED = "recorded instrument"
+
+
+def all_fields(fields: list[dict]) -> list[dict]:
+    names = {f["name"] for f in fields}
+    return list(fields) + [f for f in SYSTEM_FIELDS if f["name"] not in names]
+
+
 def build_schema(fields: list[dict]) -> dict:
+    fields = all_fields(fields)
     return {
         "type": "object",
         "properties": {f["name"]: field_schema(f) for f in fields},

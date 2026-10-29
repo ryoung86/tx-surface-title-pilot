@@ -16,9 +16,9 @@ ALL_FIELDS = [
     "filing_date", "grantors", "grantees", "legal_description_text", "survey_name", "abstract_no", "block",
     "section", "acreage", "less_and_except", "refers_to", "consideration", "notary_witnesses", "notes",
     "conveyance_type", "surface_interest", "mineral_exception", "homestead_indicators", "easements",
-    "restrictions", "liens", "plat_reference", "possession_notes",
+    "restrictions", "liens", "plat_reference", "possession_notes", "document_kind",
 ]
-LIST_FIELDS = ["instrument_type", "conveyance_type", "grantors", "grantees", "refers_to", "easements", "liens"]
+LIST_FIELDS = ["grantors", "grantees", "refers_to", "easements", "liens"]
 LEGAL = "160 acres, Section 22, Block 4, H&GN RR Co. Survey, Abstract 1234, Sample County, Texas"
 
 
@@ -67,7 +67,8 @@ DOCS = [
 def _record(overrides):
     rec = {f: F(None) for f in ALL_FIELDS}
     rec.update({"county": F("Sample"), "legal_description_text": F(LEGAL), "survey_name": F("H&GN RR Co."),
-                "abstract_no": F("1234"), "block": F("4"), "section": F("22"), "acreage": F("160")})
+                "abstract_no": F("1234"), "block": F("4"), "section": F("22"), "acreage": F("160"),
+                "document_kind": F("recorded instrument")})
     rec.update(overrides)
     for k in LIST_FIELDS:  # list-typed fields are arrays in the structured output
         v = rec[k]["value"]
@@ -77,7 +78,7 @@ def _record(overrides):
 
 def _pdf(path, rec):
     lines = ["SYNTHETIC TEST DOCUMENT - NOT A REAL RECORD", "",
-             f"{'; '.join(rec['instrument_type']['value'])}   {rec['instrument_id']['value']}",
+             f"{rec['instrument_type']['value']}   {rec['instrument_id']['value']}",
              f"Filed: {rec['filing_date']['value']}",
              "Grantor: " + ", ".join(p["name"] for p in rec["grantors"]["value"]),
              "Grantee: " + ", ".join(p["name"] for p in rec["grantees"]["value"]),
@@ -143,7 +144,8 @@ def _runsheet(path):
     wb.save(path)
     # What Claude is expected to read from it, for --mock runs.
     Path(str(path) + ".mock.json").write_text(json.dumps(
-        {"entries": entries, "owners_searched": OWNERS_SEARCHED}, indent=2))
+        {"entries": entries, "owners_searched": OWNERS_SEARCHED, "runsheet_kind": "tract",
+         "subject_acreage": "160 acres", "subject_description": LEGAL}, indent=2))
 
 
 def make_sample_tract(dest, mode="intake") -> Path:

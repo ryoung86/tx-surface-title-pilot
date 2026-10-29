@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from .schema import build_schema
+from .schema import all_fields, build_schema
 
 
 @dataclass
@@ -30,7 +30,7 @@ def load_config(config_dir="config") -> Config:
     fields = yaml.safe_load(fields_text)["fields"]
     rules = yaml.safe_load(rules_text)["rules"]
     definitions = "\n".join(
-        f"- {f['name']} ({f.get('type', 'text')}): {f.get('description', '')}" for f in fields
+        f"- {f['name']} ({f.get('type', 'text')}): {f.get('description', '')}" for f in all_fields(fields)
     )
     return Config(
         fields=fields,

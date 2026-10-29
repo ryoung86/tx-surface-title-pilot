@@ -40,18 +40,26 @@ RUNSHEET_SCHEMA = {
             },
         },
         "owners_searched": {"type": "array", "items": {"type": "string"}},
+        "runsheet_kind": {"type": "string", "enum": ["tract", "name"],
+                          "description": "tract: instruments affecting one tract of land; "
+                                         "name: everything recorded under one or more people's names"},
+        "subject_acreage": {"type": "string", "description": "Acreage of the tract the runsheet covers, if shown"},
+        "subject_description": {"type": "string", "description": "Tract description at the top, if shown"},
     },
-    "required": ["entries", "owners_searched"],
+    "required": ["entries", "owners_searched", "runsheet_kind", "subject_acreage", "subject_description"],
     "additionalProperties": False,
 }
 
-RUNSHEET_PROMPT = """This is a title agent's runsheet (document index) for one tract of land in Texas.
+RUNSHEET_PROMPT = """This is a title agent's runsheet (document index) for a tract of land in Texas.
 
 - In entries, list every recorded instrument it shows, one per line item, copying the recording reference
   (volume/page or instrument number), type, filing date, grantor and grantee as written. Use "" for anything not shown.
 - In owners_searched, list the names the runsheet says were searched by name (for liens, judgments and the like).
   Use an empty list if it doesn't say. Do not guess from the grantor and grantee columns.
-- Do not add instruments that aren't on the runsheet."""
+- Do not add instruments that aren't on the runsheet.
+- runsheet_kind: "tract" if it lists the chain for one piece of land; "name" if it lists what was found by
+  searching one or more people's names (then put those names in owners_searched).
+- subject_acreage and subject_description: the tract's acreage and description if the runsheet shows them, else ""."""
 
 
 class ExtractionError(RuntimeError):

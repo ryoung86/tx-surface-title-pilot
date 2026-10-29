@@ -10,12 +10,14 @@ To add a check:
             if ...:
                 yield i["instrument_id"], "message for the reviewer"
 """
+import re
 from dataclasses import dataclass
 
 from .fuzzy import token_sort_ratio
 
 from .validate import as_text, conf, norm_ref, val
 
+NEGATIVE = re.compile(r"\s*(none|no |n/?a\b|not (stated|found|applicable)|there is no)", re.I)
 DEFAULT_CRITICAL = ["instrument_id", "instrument_type", "filing_date", "grantors", "grantees", "legal_description_text"]
 
 REGISTRY = {}
@@ -107,7 +109,7 @@ def no_warranty_deed(ctx, params):
 def mineral_exception(ctx, params):
     for i in ctx.instruments:
         v = as_text(val(i["record"], "mineral_exception"))
-        if v:
+        if v and not NEGATIVE.match(v):
             yield i["instrument_id"], f"Mineral exception or reservation: {str(v)[:150]}"
 
 
@@ -126,24 +128,37 @@ def owner_not_name_searched(ctx, params):
 
 @rule("PK02")
 def runsheet_entry_not_uploaded(ctx, params):
-    entries = getattr(ctx.intake, "runsheet_entries", None) or []
+    """Tract runsheet entries should all be in the package. A name runsheet lists everything
+    recorded under a person's name, much of it on other land, so its misses are review items."""
     have = set().union(*(i["ref_keys"] for i in ctx.instruments)) if ctx.instruments else set()
-    for e in entries:
+    for e in getattr(ctx.intake, "runsheet_entries", None) or []:
         key = norm_ref(e.get("recording_ref"))
-        if key and key not in have:
-            yield None, (f"On the agent's runsheet but not uploaded: {e.get('recording_ref')}"
-                         f" ({e.get('instrument_type') or 'type not shown'})")
+        if not key or key in have:
+            continue
+        what = f"{e.get('recording_ref')} ({e.get('instrument_type') or 'type not shown'})"
+        if e.get("_kind") == "name":
+            yield None, (f"On the name runsheet for {e.get('_names') or 'the owner'} but not in the package: {what}. "
+                         "Confirm whether it affects this tract")
+        else:
+            yield None, f"On the agent's runsheet but not uploaded: {what}"
 
 
 @rule("PK03")
 def document_not_on_runsheet(ctx, params):
-    entries = getattr(ctx.intake, "runsheet_entries", None) or []
+    """Only checked against tract runsheets; a name runsheet doesn't list the whole chain."""
+    entries = [e for e in (getattr(ctx.intake, "runsheet_entries", None) or []) if e.get("_kind") != "name"]
     keys = {norm_ref(e.get("recording_ref")) for e in entries} - {""}
     if not keys:
         return
     for i in ctx.instruments:
         if not i["ref_keys"] & keys:
             yield i["instrument_id"], "Uploaded but not on the agent's runsheet"
+
+
+@rule("OW01")
+def ownership_review(ctx, params):
+    for instrument_id, message in ctx.chain.get("ownership_notes", []):
+        yield instrument_id, message
 
 
 def run_rules(rules_cfg: list[dict], ctx: Ctx):

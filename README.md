@@ -46,7 +46,24 @@ The intake workbook is optional. Each tract folder is handled the first way that
 | The agent's own runsheet or index (file name contains "runsheet" or "index"; PDF, image, .xlsx or .csv) | agent runsheet | Claude reads the runsheet, then after extraction: PK02 (on the runsheet, not uploaded), PK03 (uploaded, not on the runsheet), PK01 using the names the runsheet says were searched |
 | Documents only | folder only | PK01 becomes one review flag listing every owner in the chain, so the landman confirms name searches were run |
 
-In every case the tract ID is the folder name unless the intake form says otherwise. The runsheet file is never treated as a recorded instrument.
+In every case the tract ID is the folder name unless the intake form says otherwise. Documents can sit in any subfolders. Runsheets are never treated as recorded instruments, and files the AI identifies as maps, plats, appraisal cards or other supporting documents are listed separately and kept out of the chain.
+
+A runsheet can be a **tract runsheet** (the chain for one piece of land) or a **name runsheet** (everything recorded under a person's name). Claude decides which. Only tract runsheets are used for PK03, and entries on a name runsheet that aren't in the package become review items rather than "not uploaded" errors.
+
+## Tract list (tracts.csv)
+
+Put a `tracts.csv` next to the tract folders (for example `tracts\tracts.csv`):
+
+```
+tract_id,acreage,county,legal_description
+CCS.TX.SDY.0143,4.6,Liberty,"4.60 acres, more or less, in the I & G N Railroad Company Survey #4, Abstract 289..."
+```
+
+The acreage matters: it is how the code tells an out-sale (a deed covering part of the tract, like a 1-acre sale out of a 5.6-acre deed) from a conveyance of the whole tract. Without it, the last conveyance is taken as vesting and OW01 asks the reviewer to confirm. Acreage can also come from the intake form's legal description or a tract runsheet.
+
+## How the current owner is worked out
+
+The current owner is the grantee of the latest conveyance that covers the whole tract and conveys the full interest. Conveyances after it that cover less land than the tract (out-sales) or convey an undivided fraction (for example "an undivided 5% of the surface") don't replace the owner; they raise OW01 so a landman confirms. Fractional ownership is not yet totaled (R07).
 
 ## Layout
 
@@ -71,7 +88,7 @@ tests/           end-to-end tests on the synthetic tract
 
 ## Status of the rules
 
-Implemented: R01, R06, R12, R13, TS03, TS06, TS07, PK01 (owner in the chain not name-searched, a code-only rule).
+Implemented: R01, R06, R12, R13, TS03, TS06, TS07, plus code-only rules PK01 (owner with no record of a name search), PK02/PK03 (runsheet vs uploads) and OW01 (current owner needs review).
 
 In config but no check yet (reported as "skipped" on every run): R07, R09, R10, R11, T01, T02, TS01, TS02, TS04, TS05. Add each as a `@rule("ID")` function in `rules.py` once the landmen settle the wording. Some need data the pilot will bring: TS02 needs the project route file, and T01 and T02 need decisions on how homestead and heirship facts are recorded.
 

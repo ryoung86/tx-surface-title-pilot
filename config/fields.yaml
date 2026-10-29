@@ -8,8 +8,8 @@ fields:
   required: true
 - name: instrument_type
   group: core
-  type: list
-  description: Warranty, special warranty or no-warranty deed, quitclaim, deed of trust, release, vendor's lien, easement/ROW, surface use or damage agreement, surface lease, plat or replat, restriction, judgment, lien, lis pendens, tax or sheriff's deed, probate, affidavit of heirship, other
+  type: text
+  description: The instrument's title as written on it, one value only (e.g. Warranty Deed, Gift Deed, Deed of Trust, Release of Lien, Road Easement, UCC Financing Statement, Correction Affidavit). Do not answer 'other'.
   required: false
 - name: county
   group: core
@@ -34,12 +34,12 @@ fields:
 - name: execution_date
   group: core
   type: date
-  description: As written, plus normalized copy
+  description: Value as YYYY-MM-DD; source_text as written. Filing date is the clerk's filed or recorded stamp.
   required: false
 - name: filing_date
   group: core
   type: date
-  description: As written, plus normalized copy
+  description: Value as YYYY-MM-DD; source_text as written. Filing date is the clerk's filed or recorded stamp.
   required: false
 - name: grantors
   group: core
@@ -79,7 +79,7 @@ fields:
 - name: acreage
   group: core
   type: number
-  description: As stated
+  description: Acreage conveyed or covered by this instrument, as a number (e.g. 5.60)
   required: false
 - name: less_and_except
   group: core
@@ -108,13 +108,13 @@ fields:
   required: false
 - name: conveyance_type
   group: surface
-  type: list
-  description: Warranty, special warranty, without warranty, quitclaim, tax deed, sheriff's deed
+  type: text
+  description: 'For deeds: warranty, special warranty, without warranty, quitclaim, gift, tax deed or sheriff''s deed. Empty for other instruments.'
   required: false
 - name: surface_interest
   group: surface
   type: text
-  description: Fee simple, undivided fraction, life estate or remainder, as written
+  description: 'Interest conveyed, as written: all, fee simple, an undivided fraction or percent (e.g. ''undivided 5% of the surface only''), life estate or remainder'
   required: false
 - name: mineral_exception
   group: surface

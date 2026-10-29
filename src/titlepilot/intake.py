@@ -72,8 +72,10 @@ class Intake:
     documents: list = field(default_factory=list)
     source: Path | None = None
     mode: str = "intake form"
-    runsheet_path: Path | None = None
+    runsheet_path: Path | None = None          # first runsheet (shown in the summary)
+    runsheet_paths: list = field(default_factory=list)
     runsheet_entries: list = field(default_factory=list)
+    subject_acres: float | None = None
 
 
 RUNSHEET_WORDS = ("runsheet", "run sheet", "run_sheet", "run-sheet", "index")
@@ -97,9 +99,35 @@ def rel_name(folder, p) -> str:
     return Path(p).relative_to(folder).as_posix()
 
 
+def find_runsheets(folder) -> list[Path]:
+    return [p for p in _walk(folder) if is_runsheet(p)]
+
+
 def find_runsheet(folder) -> Path | None:
-    found = [p for p in _walk(folder) if is_runsheet(p)]
+    found = find_runsheets(folder)
     return found[0] if found else None
+
+
+def acres_in(text) -> float | None:
+    """Acreage stated in a description: '4.60 acres, more or less, in the ...' -> 4.6."""
+    m = re.search(r"(\d[\d,]*(?:\.\d+)?)\s*(?:\+/-\s*)?(?:acres?|ac\.?)\b", str(text or ""), re.I)
+    return float(m.group(1).replace(",", "")) if m else None
+
+
+def load_tract_list(path) -> dict:
+    """tracts.csv beside the tract folders: tract_id, acreage (and optionally county, legal_description)."""
+    import csv
+    path = Path(path)
+    if not path.exists():
+        return {}
+    with path.open(newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+    out = {}
+    for r in rows:
+        r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
+        if r.get("tract_id"):
+            out[r["tract_id"]] = r
+    return out
 
 
 def document_files(folder) -> list[Path]:
@@ -121,9 +149,9 @@ def load_package(folder) -> Intake:
             if not (folder / d.file_name).exists() and Path(d.file_name).name in found:
                 d.file_name = found[Path(d.file_name).name]
         return intake
-    runsheet = find_runsheet(folder)
-    return Intake(tract_id=folder.name, mode="agent runsheet" if runsheet else "folder only",
-                  runsheet_path=runsheet,
+    runsheets = find_runsheets(folder)
+    return Intake(tract_id=folder.name, mode="agent runsheet" if runsheets else "folder only",
+                  runsheet_path=runsheets[0] if runsheets else None, runsheet_paths=runsheets,
                   documents=[DocRow(file_name=rel_name(folder, p)) for p in document_files(folder)])
 
 
