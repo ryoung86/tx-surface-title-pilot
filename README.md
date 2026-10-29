@@ -52,7 +52,7 @@ A runsheet can be a **tract runsheet** (the chain for one piece of land) or a **
 
 ## Tract list (tracts.csv)
 
-Put a `tracts.csv` next to the tract folders (for example `tracts\tracts.csv`):
+Put a `tracts.csv` in the folder that holds the tract folders (`tracts\tracts.csv`), in a tract folder itself, or in the project folder. Each run prints which file it used:
 
 ```
 tract_id,acreage,county,legal_description
