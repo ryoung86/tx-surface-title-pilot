@@ -119,8 +119,13 @@ def word_digit_mismatches(text: str) -> list[str]:
         k = 0
         while k < len(tokens) and (tokens[-k - 1] in NUMBER_WORDS or _ord_word(tokens[-k - 1])):
             k += 1
-        if not k or k == len(tokens):        # no number words, or the start of the number isn't in view
+        if not k:
             continue
+        if k == len(tokens):        # the capture starts inside the number: check the word before it
+            before = re.findall(r"[A-Za-z]+|[-&/]", (text or "")[max(0, m.start(1) - 40):m.start(1)].lower())
+            if len(tokens) >= 15 or (before and (before[-1] in NUMBER_WORDS or before[-1] in "-&/"
+                                                  or _ord_word(before[-1]))):
+                continue
         w = words_to_number(" ".join(tokens[-k:]))
         if w is None:
             continue
