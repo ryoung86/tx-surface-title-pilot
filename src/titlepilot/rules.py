@@ -262,7 +262,7 @@ def number_checks(ctx, params):
     """Misread numbers: grantee shares that don't total 100%, and numbers whose words and digits disagree."""
     from .numbers import shares_problem, word_digit_mismatches
     for i in ctx.instruments:
-        msg = shares_problem(i.get("grantee_parties"))
+        msg = shares_problem(i.get("grantee_parties"), i.get("interest"))
         if msg:
             yield i["instrument_id"], msg
         texts = []

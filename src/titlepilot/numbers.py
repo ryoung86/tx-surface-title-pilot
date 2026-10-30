@@ -139,7 +139,7 @@ def _fmt(x):
     return str(x.numerator) if x.denominator == 1 else (f"{float(x):g}" if x.denominator in (2, 4, 5, 8, 10, 100, 1000) else str(x))
 
 
-_PCT = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+_PCT = re.compile(r"(\d*\.\d+|\d+)\s*%")
 
 
 def share_value(text: str):
@@ -157,13 +157,15 @@ def share_value(text: str):
     return None
 
 
-def shares_problem(parties) -> str | None:
-    """Shares stated for two or more grantees that don't total 100%."""
+def shares_problem(parties, conveyed=None) -> str | None:
+    """Shares stated for two or more grantees that don't total 100%, or the interest the deed conveys
+    (shares of the whole tract, e.g. 1.19% + 1.948% + ... = the 7.58% conveyed)."""
     shares = [(p.get("name"), share_value(p.get("share"))) for p in parties or [] if isinstance(p, dict) and p.get("share")]
     if len(shares) < 2 or any(v is None for _, v in shares):
         return None
     total = sum(v for _, v in shares)
-    if abs(total - 100) > 0.01:
+    targets = [100.0] + [float(x) for x in re.findall(r"(\d*\.\d+|\d+)\s*(?:%|per\s?cent)", str(conveyed or ""), re.I)]
+    if all(abs(total - t) > 0.01 for t in targets):
         listed = ", ".join(f"{n} {v:g}%" for n, v in shares)
         return f"Grantee shares add to {total:g}%, not 100% ({listed}): check for a misread number"
     return None

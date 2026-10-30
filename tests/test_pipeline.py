@@ -905,3 +905,13 @@ def test_num01_catches_810_400_misread():
     assert len(flags) == 1 and "94%" in flags[0].message
     flags, _ = run_rules([{"id": "NUM01", "severity": "High"}], Ctx([inst("7%")], {}, None))
     assert flags == []
+
+
+def test_shares_may_total_the_interest_conveyed():
+    from titlepilot.numbers import shares_problem
+    sh = lambda v: {"name": "x", "share": v}
+    # Vol. 809, Page 87: Jack Lapin's 1.968% was misread by OCR as 1.948%, so the shares totalled 7.56%
+    group = [sh("1.19%"), sh("1.19%"), sh("1.968%"), sh(".749%"), sh(".749%"), sh(".749%"), sh(".985%")]
+    assert shares_problem(group, "an undivided 7.58 percent interest") is None
+    misread = group[:2] + [sh("1.948%")] + group[3:]
+    assert "7.56" in shares_problem(misread, "an undivided 7.58 percent interest")
