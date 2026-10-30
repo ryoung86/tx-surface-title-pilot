@@ -157,3 +157,18 @@ TITLEPILOT_MAPPING_WEBHOOK=https://...the workflow URL...
 ```
 
 For Slack, use an incoming webhook URL and also add `TITLEPILOT_WEBHOOK_FORMAT=slack`. Use `--no-notify` on a run to skip the message. A failed message is logged in the run history and does not stop the run.
+
+
+## Pore space owner (PS01)
+
+Texas default: the surface owner owns the pore space unless a conveyance says otherwise, and pore space is not a mineral, so a mineral reservation doesn't take it (*Myers-Woodward, LLC v. Underground Services Markham, LLC*, Tex. 2025; confirm with counsel).
+
+Claude copies any pore space language into the `pore_space` field: pore space, subsurface or underground storage, geologic storage, salt caverns, CO2 injection, storage or sequestration. The code also searches the reservation, easement, restriction, notes and legal description text for the same words. Then:
+
+- **No language**: the pore space owner is the surface owner, with the same vesting deed.
+- **A deed reserves or excepts the pore space**: it stays with that deed's grantor and doesn't follow later surface deeds (severed).
+- **A pore space deed** (a conveyance of the pore space alone): it goes to that grantee (severed).
+- **A pore space, storage or sequestration lease, easement or option**: listed as an encumbrance; the owner doesn't change.
+- **Any other mention**: flagged for a landman to read.
+
+Every instrument with pore space language gets a PS01 flag (High), and so does a severance. The report's Pore Space Ownership section shows the pore space owner and vesting instrument, and the AI Review sheet gives the basis.

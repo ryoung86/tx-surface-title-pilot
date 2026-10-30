@@ -42,6 +42,14 @@ CODE_RULES = [
         "source": "code",
     },
     {
+        "id": "PS01",
+        "name": "Pore space language (reservation, separate conveyance, storage/sequestration lease or mention)",
+        "severity": "High",
+        "enabled": True,
+        "source": "code",
+        "legal_reference": "Myers-Woodward, LLC v. Underground Services Markham, LLC (Tex. 2025): surface owner owns pore space absent agreement (confirm with counsel)",
+    },
+    {
         "id": "MP01",
         "name": "Out-sale, exception or metes and bounds description needs to be mapped",
         "severity": "Mapping",

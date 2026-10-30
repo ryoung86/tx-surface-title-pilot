@@ -193,10 +193,12 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     ws["E16"] = acres
     ws["C17"], ws["E17"] = as_date(r_from), as_date(r_to)
     ws["B22"] = legal
-    for row in (28, 35):                                   # surface, then pore space (follows the surface)
-        ws[f"B{row}"] = "\n".join(owners) if owners else "OWNER NOT DETERMINED"
-        ws[f"C{row}"] = display_ref(vesting) if vesting else None
-        ws[f"D{row}"] = 1 if owners else 0
+    ps = chain.get("pore_space") or {"owners": owners, "vesting_instrument": chain.get("vesting_instrument")}
+    ps_vesting = next((i for i in instruments if i["instrument_id"] == ps.get("vesting_instrument")), None)
+    for row, who, deed in ((28, owners, vesting), (35, ps.get("owners") or [], ps_vesting)):
+        ws[f"B{row}"] = "\n".join(who) if who else "OWNER NOT DETERMINED"
+        ws[f"C{row}"] = display_ref(deed) if deed else None
+        ws[f"D{row}"] = 1 if who else 0
         ws[f"E{row}"] = acres
         ws[f"B{row}"].alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
     ws["B62"] = intake.records_searched or None
@@ -233,6 +235,8 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
             (deed_lines_roads if "road" in c["easements"].lower() else deed_lines_other).append(line)
         if c.get("restrictions"):
             deed_lines_other.append(f"{tag} - {c['restrictions']}")
+        if c.get("pore_space"):
+            deed_lines_other.append(f"{tag} - pore space: {c['pore_space']}")
 
     for n, e in enumerate(leases[:9]):
         for c, v in zip("BCDEFGHI", [abbrev(e["type"]), names(e["grantors"]), names(e["grantees"]),
@@ -354,6 +358,9 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         ["Current surface owner", names(owners) or "NOT DETERMINED"],
         ["Vesting instrument", display_ref(vesting) if vesting else None],
         ["Flags", str(len(flags))],
+        ["Pore space owner", (names(chain.get("pore_space", {}).get("owners")) or "NOT DETERMINED")
+         + ("  (SEVERED from the surface)" if chain.get("pore_space", {}).get("severed") else "")],
+        ["Pore space basis", chain.get("pore_space", {}).get("basis")],
         ["Mapping needed", f"{len(to_map)} item(s): see AI Mapping" if to_map else "none"],
         ["Ownership notes", "\n".join(m for _, m in chain.get("ownership_notes", [])) or "none"],
         ["Instruments with an unrecognized type", ", ".join(chain["unclassified"]) or "none"],

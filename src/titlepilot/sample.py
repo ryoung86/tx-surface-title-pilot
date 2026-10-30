@@ -16,7 +16,7 @@ ALL_FIELDS = [
     "filing_date", "grantors", "grantees", "legal_description_text", "survey_name", "abstract_no", "block",
     "section", "acreage", "less_and_except", "refers_to", "consideration", "notary_witnesses", "notes",
     "conveyance_type", "surface_interest", "mineral_exception", "homestead_indicators", "easements",
-    "restrictions", "liens", "plat_reference", "possession_notes", "document_kind",
+    "restrictions", "liens", "plat_reference", "possession_notes", "document_kind", "pore_space",
 ]
 LIST_FIELDS = ["grantors", "grantees", "refers_to", "easements", "liens"]
 LEGAL = "160 acres, Section 22, Block 4, H&GN RR Co. Survey, Abstract 1234, Sample County, Texas"

@@ -121,6 +121,11 @@ fields:
   type: text
   description: Any minerals excepted or reserved from the conveyance, verbatim
   required: false
+- name: pore_space
+  group: surface
+  type: text
+  description: "Any language about pore space, subsurface or underground storage space, geologic storage, storage reservoirs or salt caverns, or carbon dioxide (CO2) injection, storage or sequestration rights: grants, reservations, exceptions, leases, easements or options. Verbatim. Empty if none. A plain mineral reservation ('oil, gas and other minerals') is not pore space language: leave it in mineral_exception only"
+  required: false
 - name: homestead_indicators
   group: surface
   type: text

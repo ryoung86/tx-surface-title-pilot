@@ -670,3 +670,71 @@ def test_email_failure_does_not_stop_run(monkeypatch):
     monkeypatch.setitem(sys.modules, "win32com.client", None)
     (channel, result), = mapping.send_notifications("T1", 1, [_map_item()])
     assert channel == "Email" and result.startswith("FAILED") and "Outlook" in result
+
+
+@pytest.mark.parametrize("raw,category", [
+    ("Pore Space Lease", "pore space agreement"), ("Carbon Sequestration Easement", "pore space agreement"),
+    ("Underground Storage Agreement", "pore space agreement"), ("Pore Space Deed", "pore space"),
+    ("Deed of Trust", "lien"), ("Warranty Deed", "conveyance"),
+])
+def test_pore_space_types(raw, category):
+    from titlepilot.chain import classify
+    from titlepilot.validate import norm_type
+    assert classify(norm_type(raw)) == category
+
+
+def _inst(iid, itype, date, grantor, grantee, acres=4.6, **extra):
+    from titlepilot.chain import classify
+    return {"instrument_id": iid, "type": itype, "category": classify(itype), "filing_date": date,
+            "execution_date": None, "grantors": [grantor], "grantees": [grantee], "file_name": iid + ".pdf",
+            "acreage": acres, "interest": None, "kind": "recorded instrument", "recorded": True, "legal": "",
+            "refers_to": [], "ref_keys": {iid}, "mineral_exception": None, "easements": None, "notes": None,
+            "restrictions": None, "pore_space": None, **extra}
+
+
+def test_pore_space_follows_surface_without_language():
+    from titlepilot.chain import build_chain
+    chain = build_chain([_inst("A", "warranty deed", "1990-01-01", "X", "Y"),
+                         _inst("B", "warranty deed", "2000-01-01", "Y", "Z",
+                               mineral_exception="SAVE AND EXCEPT all oil, gas and other minerals")], 4.6)
+    ps = chain["pore_space"]
+    assert ps["owners"] == ["Z"] and ps["vesting_instrument"] == "B" and not ps["severed"] and ps["mentions"] == []
+    assert "Myers-Woodward" in ps["basis"]
+
+
+def test_pore_space_reserved_stays_with_grantor():
+    from titlepilot.chain import build_chain
+    from titlepilot.rules import Ctx, run_rules
+    insts = [_inst("A", "warranty deed", "1990-01-01", "X", "Y"),
+             _inst("B", "warranty deed", "2000-01-01", "Y", "Z",
+                   pore_space="Grantor reserves unto itself all pore space and subsurface storage rights"),
+             _inst("C", "warranty deed", "2010-01-01", "Z", "Q"),
+             _inst("D", "pore space lease", "2015-01-01", "Y", "CarbonCo LLC")]
+    chain = build_chain(insts, 4.6)
+    ps = chain["pore_space"]
+    assert chain["current_owner"] == ["Q"]
+    assert ps["severed"] and ps["owners"] == ["Y"] and ps["vesting_instrument"] == "B"
+    assert ps["burdens"] == ["D"]
+    assert any(e["instrument_id"] == "D" for e in chain["encumbrances"])
+    flags, _ = run_rules([{"id": "PS01", "severity": "High"}], Ctx(insts, chain, None))
+    assert {f.instrument_id for f in flags} == {"B", "D"} and any("severed" in f.message for f in flags)
+
+
+def test_pore_space_separate_deed_and_mention():
+    from titlepilot.chain import build_chain
+    chain = build_chain([_inst("A", "warranty deed", "1990-01-01", "X", "Y"),
+                         _inst("B", "pore space deed", "2000-01-01", "Y", "Storage Partners LP"),
+                         _inst("C", "warranty deed", "2005-01-01", "Y", "Z",
+                               notes="Subject to any carbon dioxide injection rights of record")], 4.6)
+    ps = chain["pore_space"]
+    assert ps["severed"] and ps["owners"] == ["Storage Partners LP"]
+    assert [m["kind"] for m in ps["mentions"]] == ["grant", "mention"]
+    assert chain["current_owner"] == ["Z"]
+
+
+def test_report_fills_pore_space_section(sample, tmp_path):
+    import openpyxl
+    res = run_tract(sample / TRACT, load_config(CONFIG), DB(tmp_path / "p.sqlite"), tmp_path / "out", mock=True,
+                    log=lambda *_: None, notify_team=False)
+    ws = openpyxl.load_workbook(res["report"])["Ownership "]
+    assert ws["B35"].value == ws["B28"].value == "Smith Ranch LLC"

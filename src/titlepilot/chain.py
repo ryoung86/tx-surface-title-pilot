@@ -8,7 +8,7 @@ import re
 
 from .fuzzy import token_sort_ratio
 
-ENCUMBRANCE_CATEGORIES = {"lien", "judgment", "easement", "restriction", "surface agreement"}
+ENCUMBRANCE_CATEGORIES = {"lien", "judgment", "easement", "restriction", "surface agreement", "pore space agreement"}
 
 CONVEYANCE_KEYWORDS = ("warranty deed", "quitclaim", "deed without warranty", "tax deed", "sheriff",
                        "heirship", "probate", "executor's deed", "trustee's deed", "gift deed", "deed of gift",
@@ -23,6 +23,10 @@ def classify(itype: str) -> str:
         return "unknown"
     if t.startswith("release") or "partial release" in t:
         return "release"
+    if any(k in t for k in ("pore", "sequestration", "carbon", "co2", "underground storage", "subsurface storage",
+                            "storage cavern", "storage agreement", "storage lease", "storage easement")):
+        agreement = any(k in t for k in ("lease", "easement", "option", "agreement", "license", "right of way"))
+        return "pore space agreement" if agreement else "pore space"
     if "judgment" in t or "lis pendens" in t:
         return "judgment"
     if ("deed of trust" in t or "mortgage" in t or "lien" in t
@@ -60,7 +64,7 @@ def _dedupe(names):
 def _slim(i):
     keys = ("instrument_id", "type", "category", "filing_date", "execution_date", "grantors", "grantees",
             "file_name", "acreage", "interest", "kind", "legal", "instrument_no", "mineral_exception",
-            "easements", "liens", "notes", "pages", "ref_keys", "restrictions")
+            "easements", "liens", "notes", "pages", "ref_keys", "restrictions", "pore_space")
     return {k: i.get(k) for k in keys}
 
 
@@ -121,7 +125,7 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
     ]
     owners = _dedupe((conveyances[0]["grantors"] if conveyances else [])
                      + [g for c in conveyances for g in c["grantees"]])
-    return {
+    result = {
         "instruments": [_slim(i) for i in ordered],
         "conveyances": [_slim(i) for i in conveyances],
         "current_owner": vesting["grantees"] if vesting else [],
@@ -134,3 +138,6 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
         "undated": [i["instrument_id"] for i in ordered if not i["filing_date"]],
         "unclassified": [i["instrument_id"] for i in ordered if i["category"] in ("other", "unknown")],
     }
+    from .pore import pore_owner
+    result["pore_space"] = pore_owner(result)
+    return result

@@ -47,12 +47,19 @@ def field_schema(field: dict) -> dict:
     }
 
 
+PORE_SPACE_DEFINITION = (
+    "Any language about pore space, subsurface or underground storage space, geologic storage, storage reservoirs "
+    "or salt caverns, or carbon dioxide (CO2) injection, storage or sequestration rights: grants, reservations, "
+    "exceptions, leases, easements or options. Verbatim. Empty if none. A plain mineral reservation "
+    "('oil, gas and other minerals') is not pore space language: leave it in mineral_exception only")
+
 # Fields the code depends on, added to every schema whether or not the workbook lists them.
 SYSTEM_FIELDS = [
     {"name": "document_kind", "type": "text",
      "description": "What this file is: 'recorded instrument' if it carries a county recording reference "
                     "(volume/page or instrument number); otherwise 'map or plat', 'tax or appraisal record', "
                     "or 'other supporting document'"},
+    {"name": "pore_space", "type": "text", "description": PORE_SPACE_DEFINITION},
 ]
 RECORDED = "recorded instrument"
 

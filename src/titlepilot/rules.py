@@ -201,6 +201,18 @@ def ownership_review(ctx, params):
         yield instrument_id, message
 
 
+@rule("PS01")
+def pore_space_language(ctx, params):
+    ps = ctx.chain.get("pore_space") or {}
+    what = {"reservation": "reserves or excepts pore space", "grant": "conveys pore space",
+            "agreement": "pore space / storage agreement (burden on the pore space)", "mention": "mentions pore space"}
+    for m in ps.get("mentions", []):
+        yield m["instrument_id"], f"{what[m['kind']].capitalize()}: \"{m['text'][:220]}\". Confirm the pore space owner"
+    if ps.get("severed"):
+        yield ps.get("vesting_instrument"), (f"Pore space is severed from the surface: pore space owner shown as "
+                                             f"{', '.join(ps.get('owners') or []) or '?'}, not the surface owner")
+
+
 @rule("MP01")
 def needs_mapping(ctx, params):
     from .mapping import mapping_items
