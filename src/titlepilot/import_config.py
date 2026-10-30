@@ -42,6 +42,13 @@ CODE_RULES = [
         "source": "code",
     },
     {
+        "id": "NUM01",
+        "name": "Possible misread number: grantee shares don't total 100%, or a number's words and digits disagree",
+        "severity": "High",
+        "enabled": True,
+        "source": "code",
+    },
+    {
         "id": "PK04",
         "name": "Same instrument uploaded twice, or file name's recording reference doesn't match the document",
         "severity": "Medium",

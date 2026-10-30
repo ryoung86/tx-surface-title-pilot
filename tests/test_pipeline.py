@@ -872,3 +872,36 @@ def test_major_leases_and_row_tab_split():
     assert is_lease_paper(e("Assignment and Bill of Sale (Carbon Dioxide Storage Lease)"))
     assert not material_lease(e("Accommodation Agreement")) and not material_lease(e("Pipeline Easement"))
     assert not is_lease_paper(e("Amendment of Right of Way and Easement"))
+
+
+@pytest.mark.parametrize("text,bad", [
+    ("an undivided FIVE (5%) PER CENT", False), ("an undivided one twenty-fifth (1/25)", False),
+    ("fifteen (15) years", False), ("the South twenty-five (25') feet", False), ("Ten and No/100 Dollars ($10.00)", False),
+    ("an undivided SEVEN (1%) interest", True), ("twenty-five (52) feet", True), ("one-fourth (1/3)", True),
+    # forms from the CCS.TX.SDY.0180 deeds
+    ("containing one hundred&seventy-five/one-hundredths (100.75) acres", False),
+    ("four hundred ninety-six & four/hundredths (496.04) acres", False),
+    ("three hundred seventy-one and eight/tenths (371.8) acres", False),
+    ("ONE HUNDRED SIXTY-NINE AND SIXTY-NINE HUNDREDTHS (169.69)", False),
+    ("an undivided nine and one-half one Hundredths (9.5/100ths) interest", False),
+    ("the following seventeen (27) courses", True),            # OCR read 17 as 27
+    ("containing thirty- four (3%) acres", True),               # OCR read 34 as 3%
+])
+def test_word_digit_mismatch(text, bad):
+    from titlepilot.numbers import word_digit_mismatches
+    assert bool(word_digit_mismatches(text)) is bad
+
+
+def test_num01_catches_810_400_misread():
+    """The 1% / 7% misread on Vol. 810, Page 400: shares totalled 94% instead of 100%."""
+    from titlepilot.rules import Ctx, run_rules
+    share = lambda n, s: {"name": n, "marital_status": "", "spouse": "", "capacity": "", "share": s}
+    def inst(price):
+        return {"instrument_id": "Vol. 810, Page 400", "record": {}, "grantee_parties": [
+            share("P. H. Brown", "11.625%"), share("Morris Lewis, Jr.", "11.625%"), share("Celian H. Lewis", "11.625%"),
+            share("Gordon DeMent", "11.625%"), share("Jack M. Montgomery, Jr.", "23.25%"),
+            share("V & M Cotton Company", "23.25%"), share("William A. Price, Jr.", price)]}
+    flags, _ = run_rules([{"id": "NUM01", "severity": "High"}], Ctx([inst("1%")], {}, None))
+    assert len(flags) == 1 and "94%" in flags[0].message
+    flags, _ = run_rules([{"id": "NUM01", "severity": "High"}], Ctx([inst("7%")], {}, None))
+    assert flags == []

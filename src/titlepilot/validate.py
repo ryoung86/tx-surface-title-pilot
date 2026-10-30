@@ -164,6 +164,7 @@ def normalize(record: dict, doc) -> dict:
         "execution_date": norm_date(val(record, "execution_date")) or norm_date(src(record, "execution_date")),
         "grantors": party_names(val(record, "grantors")),
         "grantees": party_names(val(record, "grantees")),
+        "grantee_parties": [x for x in (val(record, "grantees") or []) if isinstance(x, dict)],
         "refers_to": [norm_ref(x) for x in (val(record, "refers_to") or []) if is_ref(x)],
         "kind": kind,
         "recorded": RECORDED in kind,

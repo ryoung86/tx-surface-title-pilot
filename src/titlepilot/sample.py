@@ -31,7 +31,7 @@ def F(value, confidence="high", source=None):
 
 
 def P(*names):
-    return [{"name": n, "marital_status": "", "spouse": "", "capacity": "individual"} for n in names]
+    return [{"name": n, "marital_status": "", "spouse": "", "capacity": "individual", "share": ""} for n in names]
 
 
 # file, found_by, owner_searched, record overrides

@@ -8,6 +8,8 @@ Rules for every field:
 - For each field, put the exact words you read in source_text and set confidence to high, medium or low. Use low when the text is hard to read or you are unsure which words apply.
 - Note any minerals excepted or reserved from the conveyance in mineral_exception, verbatim. Leave it empty if there is none; do not describe its absence.
 - pore_space: copy, verbatim, any sentence that grants, reserves, excepts, leases or mentions pore space, subsurface or underground storage, geologic storage, salt caverns, or CO2 injection, storage or sequestration rights. Read the whole instrument for it, including exhibits and reservations. A plain reservation of 'oil, gas and other minerals' is not pore space language.
+- Numbers: copy every number exactly as written, including both the words and the digits when the instrument gives both (e.g. "an undivided seven per cent (7%)"), in value and source_text. Read digits carefully: 1 and 7, 3 and 8, 5 and 6 are easy to confuse on old typed copies. If a digit is hard to read, set confidence to low.
+- Grantee shares: when the instrument gives each grantee a share ("each receiving a 11.625% interest", "an undivided one-half to ..."), put each grantee's share, as written, in that party's share.
 - refers_to: only the recording references (volume/page or instrument number) of earlier instruments this one cites, releases or corrects, one per item, e.g. 'Vol. 594, Page 624' or 'Instrument No. 2011009176'. No descriptions.
 - Dates: give the value as YYYY-MM-DD and the words as written in source_text. Use the clerk's filed or recorded stamp for filing_date.
 - instrument_type: the title of the instrument as written on it (one value). Never 'other'.

@@ -17,8 +17,10 @@ PARTY = {
         "marital_status": {"type": "string"},
         "spouse": {"type": "string"},
         "capacity": {"type": "string"},
+        "share": {"type": "string", "description": "This party's share of the interest conveyed, exactly as written "
+                                                    "(e.g. '11.625%', 'an undivided one-half (1/2)'); '' if not stated"},
     },
-    "required": ["name", "marital_status", "spouse", "capacity"],
+    "required": ["name", "marital_status", "spouse", "capacity", "share"],
     "additionalProperties": False,
 }
 

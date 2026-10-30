@@ -185,3 +185,13 @@ Many name runsheets have a column showing what the agent decided about each entr
 ## Ordering and vesting
 
 Instruments are put in filing order. One with no filing date read goes by the date it was signed; one with neither date goes last and is never taken as the vesting deed, so a late-recorded probate or affidavit can't be mistaken for the newest conveyance. Correction deeds ("Correction Deed", "Corrective ... Deed") count as conveyances.
+
+
+## Misread numbers (NUM01)
+
+Two checks catch a misread digit (a 7 read as a 1, a 17 read as 27) without a second reading:
+
+- **Shares must add up.** Claude records each grantee's share as written. If the shares in one instrument don't total 100% of the interest conveyed, NUM01 flags it. (On Vol. 810, Page 400 a misread 7% → 1% made the shares total 94%.)
+- **Words must match digits.** Deeds usually write numbers twice: "fifteen (15) years", "one twenty-fifth (1/25)", "three hundred seventy-one and eight/tenths (371.8) acres". If the words and digits disagree, NUM01 flags it. When the start of a number can't be seen, it is skipped rather than reported.
+
+Tested on the 1,099 word/digit pairs in tract CCS.TX.SDY.0180: 10 flags, most of them real misreads (e.g. "seventeen (27)" where the page says 17). Low confidence on acreage or the interest conveyed is also flagged (R13).

@@ -18,7 +18,8 @@ from .fuzzy import token_sort_ratio
 from .validate import as_text, conf, norm_ref, val
 
 NEGATIVE = re.compile(r"\s*(none|no |n/?a\b|not (stated|found|applicable)|there is no)", re.I)
-DEFAULT_CRITICAL = ["instrument_id", "instrument_type", "filing_date", "grantors", "grantees", "legal_description_text"]
+DEFAULT_CRITICAL = ["instrument_id", "instrument_type", "filing_date", "grantors", "grantees", "legal_description_text",
+                    "acreage", "surface_interest"]
 
 REGISTRY = {}
 
@@ -254,6 +255,28 @@ def pore_space_language(ctx, params):
     if ps.get("severed"):
         yield ps.get("vesting_instrument"), (f"Pore space is severed from the surface: pore space owner shown as "
                                              f"{', '.join(ps.get('owners') or []) or '?'}, not the surface owner")
+
+
+@rule("NUM01")
+def number_checks(ctx, params):
+    """Misread numbers: grantee shares that don't total 100%, and numbers whose words and digits disagree."""
+    from .numbers import shares_problem, word_digit_mismatches
+    for i in ctx.instruments:
+        msg = shares_problem(i.get("grantee_parties"))
+        if msg:
+            yield i["instrument_id"], msg
+        texts = []
+        for f in (i.get("record") or {}).values():
+            if isinstance(f, dict):
+                for k in ("source_text", "value"):
+                    v = f.get(k)
+                    texts += [v] if isinstance(v, str) else [str(x) for x in v] if isinstance(v, list) else []
+        seen = set()
+        for t in texts:
+            for m in word_digit_mismatches(t):
+                if m not in seen:
+                    seen.add(m)
+                    yield i["instrument_id"], f"Words and digits disagree, {m}: check the image"
 
 
 @rule("MP01")
