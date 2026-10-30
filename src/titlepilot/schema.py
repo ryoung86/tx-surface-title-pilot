@@ -53,6 +53,8 @@ PORE_SPACE_DEFINITION = (
     "exceptions, leases, easements or options. Verbatim. Empty if none. A plain mineral reservation "
     "('oil, gas and other minerals') is not pore space language: leave it in mineral_exception only")
 
+TERM_DEFINITION = ("The term of a lease, easement or timber deed as written: primary term, renewals, extensions and options (e.g. 'thirty (30) years ... two renewal terms of five (5) years each'). Empty if none stated")
+
 # Fields the code depends on, added to every schema whether or not the workbook lists them.
 SYSTEM_FIELDS = [
     {"name": "document_kind", "type": "text",
@@ -60,6 +62,7 @@ SYSTEM_FIELDS = [
                     "(volume/page or instrument number); otherwise 'map or plat', 'tax or appraisal record', "
                     "or 'other supporting document'"},
     {"name": "pore_space", "type": "text", "description": PORE_SPACE_DEFINITION},
+    {"name": "term", "type": "text", "description": TERM_DEFINITION},
 ]
 RECORDED = "recorded instrument"
 

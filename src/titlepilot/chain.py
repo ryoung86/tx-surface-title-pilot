@@ -69,7 +69,7 @@ def _dedupe(names):
 def _slim(i):
     keys = ("instrument_id", "type", "category", "filing_date", "execution_date", "grantors", "grantees",
             "file_name", "acreage", "interest", "kind", "legal", "instrument_no", "mineral_exception",
-            "easements", "liens", "notes", "pages", "ref_keys", "restrictions", "pore_space")
+            "easements", "liens", "notes", "pages", "ref_keys", "restrictions", "pore_space", "term", "county")
     return {k: i.get(k) for k in keys}
 
 

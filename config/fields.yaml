@@ -121,6 +121,11 @@ fields:
   type: text
   description: Any minerals excepted or reserved from the conveyance, verbatim
   required: false
+- name: term
+  group: surface
+  type: text
+  description: "The term of a lease, easement or timber deed as written: primary term, renewals, extensions and options (e.g. 'thirty (30) years ... two renewal terms of five (5) years each'). Empty if none stated"
+  required: false
 - name: pore_space
   group: surface
   type: text

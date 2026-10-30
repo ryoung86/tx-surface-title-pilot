@@ -500,7 +500,7 @@ def test_title_report_in_seg_format(sample, tmp_path):
     db = DB(tmp_path / "runs.sqlite")
     res = run_tract(sample / TRACT, load_config(CONFIG), db, tmp_path / "out", mock=True, log=lambda *_: None)
     wb = openpyxl.load_workbook(res["report"])
-    assert wb.sheetnames == ["Ownership ", "Ownership BT Data", "Encumbrances", "Flowchart", "Names Examined",
+    assert wb.sheetnames == ["Ownership ", "Ownership BT Data", "Encumbrances", "ROWs and Easements", "Flowchart", "Names Examined",
                              "Index to All Documents", "Runsheet ", "AI Review", "AI Mapping", "AI Flags", "AI Supporting Docs"]
     own = wb["Ownership "]
     assert own["C14"].value == TRACT and own["B11"].value == "Smith Ranch LLC"
@@ -512,7 +512,9 @@ def test_title_report_in_seg_format(sample, tmp_path):
     enc = wb["Encumbrances"]
     assert "2001004410" in enc["B44"].value and "Acme Supply" in enc["B44"].value   # open judgment
     assert "1980000123" not in (enc["B44"].value or "")                             # released deed of trust
-    assert enc["B29"].value == "None"                                               # pipeline isn't a road
+    assert enc["B29"].value == "See ROWs and Easements Tab"                         # easements are on the ROW tab
+    rows = [r for r in wb["ROWs and Easements"].iter_rows(min_row=13, values_only=True) if r[1]]
+    assert any("2005" in str(r[1]) and "Pecos Pipeline" in str(r[4]) for r in rows)
     assert any("TS03" == r[0].value for r in wb["AI Flags"].iter_rows(min_row=2))
 
 
@@ -856,3 +858,17 @@ def test_mapping_tract_described_only_as_portion():
         "described in Gift Deed recorded in Book 1391, Page 354"))
     items = mapping_items(chain, intake)
     assert len(items) == 1 and "portion of the 13807 ac" in items[0]["reasons"][0]
+
+
+
+def test_major_leases_and_row_tab_split():
+    from titlepilot.chain import classify
+    from titlepilot.report import is_lease_paper, lease_label, material_lease
+    e = lambda t: {"type": t.lower(), "category": classify(t.lower())}
+    assert material_lease(e("Memorandum of Land Lease and Solar Easement"))
+    assert lease_label(e("Memorandum of Carbon Dioxide Storage Lease and Easement Agreement")) == "CARBON"
+    assert lease_label(e("Memorandum of Lease (Wind Energy Ground Lease)")) == "WIND"
+    assert is_lease_paper(e("Amendment No. 1 to Land Lease and Solar Easement"))
+    assert is_lease_paper(e("Assignment and Bill of Sale (Carbon Dioxide Storage Lease)"))
+    assert not material_lease(e("Accommodation Agreement")) and not material_lease(e("Pipeline Easement"))
+    assert not is_lease_paper(e("Amendment of Right of Way and Easement"))

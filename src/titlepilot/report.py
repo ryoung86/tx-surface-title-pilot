@@ -61,6 +61,28 @@ def display_ref(inst) -> str:
     return inst.get("instrument_id") or ""
 
 
+MAJOR = (("carbon", "CARBON"), ("co2", "CARBON"), ("sequestration", "CARBON"), ("storage lease", "CARBON"),
+         ("solar", "SOLAR"), ("wind", "WIND"), ("grazing", "GRAZING"), ("agricultur", "GRAZING"),
+         ("oil, gas", "OGML"), ("oil and gas", "OGML"))
+
+
+def is_lease_paper(e) -> bool:
+    """An amendment, assignment or other follow-on paper for a lease (listed in the Index, not the tables)."""
+    t = e["type"]
+    return any(k in t for k in ("amendment", "assignment", "advisory", "consulting")) and (
+        "lease" in t or e["category"] in ("pore space agreement", "surface agreement") or any(k in t for k, _ in MAJOR))
+
+
+def material_lease(e) -> bool:
+    t = e["type"]
+    return (not is_lease_paper(e) and e["category"] in ("pore space agreement", "surface agreement")
+            and "accommodation" not in t and any(k in t for k, _ in MAJOR))
+
+
+def lease_label(e) -> str:
+    return next((label for k, label in MAJOR if k in e["type"]), abbrev(e["type"]))
+
+
 def record_type(inst) -> str:
     """The agent's own label when the file name starts with one (DR_..., OPR_...); otherwise Deed Records
     for volume/page references and Official Public Records for instrument numbers."""
@@ -219,6 +241,9 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
             ws.cell(2 + n, c).value = v
 
     # ---- Encumbrances -------------------------------------------------------------------------
+    # SEG layout: the Active Material Encumbrances table holds the major leases (solar, wind, carbon
+    # storage, oil and gas, grazing); every easement, right of way and other surface burden goes on the
+    # ROWs and Easements tab, and the text sections point there.
     ws = wb["Encumbrances"]
     current = [e for e in chain["encumbrances"] if e["status"] == "open"]
     is_mortgage = lambda e: e["category"] == "lien" and any(k in e["type"] for k in ("deed of trust", "mortgage",
@@ -227,14 +252,13 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
                       f"{fmt_date(e.get('execution_date') or e['filing_date'])} from {names(e['grantors']) or '?'} "
                       f"to {names(e['grantees']) or '?'}" + (f" - {abstractor_note(e)}" if abstractor_note(e) else ""))
     mortgages = [e for e in current if is_mortgage(e)]
-    roads = [e for e in current if e["category"] == "easement" and "road" in f"{e['type']} {e.get('easements')}".lower()]
-    rails = [e for e in current if "rail" in f"{e['type']} {e.get('easements')}".lower() and e not in roads]
-    pore = [e for e in current if e["category"] == "pore space agreement"]
-    # Leases first (solar, wind, ground, pipeline site), then other surface agreements such as
-    # accommodation agreements, so the table's nine rows hold the leases.
-    leases = sorted([e for e in current if e["category"] == "surface agreement"],
-                    key=lambda e: (0 if "lease" in e["type"] or "timber" in e["type"] else 1, e["filing_date"] or ""))
-    other = [e for e in current if e not in mortgages + roads + rails + leases + pore]
+    major = [e for e in current if material_lease(e)]
+    follow_on = [e for e in current if e not in major and is_lease_paper(e)]     # amendments/assignments of leases
+    row_items = [e for e in current if e not in mortgages + major + follow_on
+                 and e["category"] in ("easement", "surface agreement", "restriction")
+                 and "accommodation" not in e["type"]]
+    other = [e for e in current if e not in mortgages + major + follow_on + row_items
+             and e["category"] not in ("pore space agreement", "surface agreement")]
 
     # Burdens created inside conveyances: reserved easements and deed restrictions (rights of first
     # refusal, use covenants). They aren't separate instruments, so they're listed as text lines.
@@ -248,33 +272,55 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
             deed_lines_other.append(f"{tag} - {c['restrictions']}")
         if c.get("pore_space"):
             deed_lines_pore.append(f"{tag} - pore space: {c['pore_space']}")
+    ps = chain.get("pore_space") or {}
+    if ps.get("severed"):
+        deed_lines_pore.insert(0, f"Pore space severed from the surface: {ps.get('basis')}")
 
-    for n, e in enumerate(leases[:9]):
-        for c, v in zip("BCDEFGHI", [abbrev(e["type"]), names(e["grantors"]), names(e["grantees"]),
-                                     as_date(e.get("execution_date") or e["filing_date"]), None, display_ref(e),
-                                     "Open", e.get("legal")]):
+    for n, e in enumerate(major[:9]):
+        for c, v in zip("BCDEFGHI", [lease_label(e), names(e["grantors"]), names(e["grantees"]),
+                                     as_date(e.get("execution_date") or e["filing_date"]), e.get("term"),
+                                     display_ref(e), "Current", e.get("legal")]):
             ws[f"{c}{5 + n}"] = v
-    if not leases:
+            ws[f"{c}{5 + n}"].alignment = Alignment(wrap_text=True, vertical="top")
+        ws.row_dimensions[5 + n].height = max(30, 15 * (1 + len(str(e.get("term") or "")) // 30))
+    if not major:
         ws["C6"] = "None"
-    elif len(leases) == 1:
+    elif len(major) == 1:
         ws["C6"] = None          # clear the template's placeholder
     for n, e in enumerate(mortgages[:3]):
         for c, v in zip("BCDEFGHI", [abbrev(e["type"]), names(e["grantors"]), names(e["grantees"]),
-                                     as_date(e.get("execution_date") or e["filing_date"]), None, display_ref(e), None,
-                                     e.get("legal")]):
+                                     as_date(e.get("execution_date") or e["filing_date"]), e.get("term"),
+                                     display_ref(e), None, e.get("legal")]):
             ws[f"{c}{18 + n}"] = v
     if not mortgages:
         ws["C18"] = "None"
-    other += mortgages[3:] + leases[9:]
-    extra = {"B24": deed_lines_pore, "B29": deed_lines_roads, "B44": deed_lines_other}
-    for cell, items in (("B24", pore), ("B29", roads), ("B34", rails), ("B39", []), ("B44", other)):
-        lines = [text(e) for e in items] + extra.get(cell, [])
+    other += mortgages[3:] + major[9:]
+    see = ["See ROWs and Easements Tab"] if row_items else []
+    sections = {"B24": deed_lines_pore, "B29": see + deed_lines_roads, "B34": list(see), "B39": list(see),
+                "B44": see + [text(e) for e in other] + deed_lines_other}
+    if not row_items:   # no ROW tab entries: list the roads and railroads in their own sections, as before
+        roads = [e for e in current if e["category"] == "easement" and "road" in f"{e['type']} {e.get('easements')}".lower()]
+        sections["B29"] = [text(e) for e in roads] + deed_lines_roads
+    for cell, lines in sections.items():
         ws[cell] = "\n".join(lines) if lines else "None"
         ws[cell].alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
         n = max(1, sum(1 + len(t) // 110 for t in lines))
         ws.row_dimensions[ws[cell].row].height = max(ws.row_dimensions[ws[cell].row].height or 15, 15 * n)
 
     _fit_width(ws)
+
+    # ---- ROWs and Easements (same columns as the Runsheet) --------------------------------------
+    rows_ws = wb.copy_worksheet(wb["Runsheet "])
+    rows_ws.title = "ROWs and Easements"
+    wb.move_sheet(rows_ws, offset=wb.sheetnames.index("Encumbrances") + 1 - wb.sheetnames.index("ROWs and Easements"))
+    rows_ws["A2"] = "ACTIVE RIGHT OF WAYS AND EASEMENTS"
+    row_items_sorted = sorted(row_items, key=lambda e: e["filing_date"] or e.get("execution_date") or "")
+    row_table = [[n, display_ref(e), e["type"].title(), names(e["grantors"]), names(e["grantees"]),
+                          as_date(e.get("execution_date")), as_date(e["filing_date"]), record_type(e),
+                          (e.get("county") or intake.county or "").upper() or None,
+                          "; ".join(x for x in (e.get("easements"), e.get("legal")) if x)[:400],
+                          "; ".join(x for x in (e.get("term") and f"Term: {e['term']}", e.get("notes")) if x) or None]
+                         for n, e in enumerate(row_items_sorted, 1)]
 
     # ---- Names Examined -----------------------------------------------------------------------
     ws = wb["Names Examined"]
@@ -300,7 +346,7 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
                            or (display_ref(i) if record_type(i) == "OPR" else None)])
         page += i.get("pages") or 1
         run_rows.append([n, display_ref(i), abbrev(i["type"]), names(i["grantors"]), names(i["grantees"]), eff,
-                         filed, record_type(i), f"{intake.county} County" if intake.county else None,
+                         filed, record_type(i), f"{i.get('county') or intake.county} County" if (i.get('county') or intake.county) else None,
                          (i.get("legal") or "")[:250], abstractor_note(i)])
     ws = wb["Index to All Documents"]
     last = _write_rows(ws, 3, 2, 9, index_rows)
@@ -310,6 +356,10 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     ws["A4"] = f"Records from {a} to {b}" if researched else f"Documents in package dated {a} to {b}"
     ws["A6"] = legal
     ws["A8"] = f"{acres:.2f} ACRES, MORE OR LESS" if acres else None
+    for sheet in (wb["ROWs and Easements"],):
+        sheet["A4"], sheet["A6"], sheet["A8"] = ws["A4"].value, ws["A6"].value, ws["A8"].value
+        rlast = _write_rows(sheet, 13, 1, 11, row_table or [["", "None"]])
+        sheet.print_area = f"A1:K{max(rlast, 13)}"
     last = _write_rows(ws, 13, 1, 11, run_rows)
     ws.conditional_formatting.add(f"F13:G{max(last, 13)}", FormulaRule(formula=["AND($F13<>\"\",$G13<>\"\",$G13<$F13)"], fill=RED))
     ws.print_area = f"A1:K{max(last, 13)}"

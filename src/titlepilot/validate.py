@@ -177,6 +177,7 @@ def normalize(record: dict, doc) -> dict:
         "notes": as_text(val(record, "notes")),
         "restrictions": as_text(val(record, "restrictions")),
         "pore_space": as_text(val(record, "pore_space")),
+        "term": as_text(val(record, "term")),
         "county": as_text(val(record, "county")),
         "found_by": doc.found_by,
         "record": record,
