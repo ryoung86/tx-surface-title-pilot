@@ -24,7 +24,7 @@ Newest at the bottom. Commit IDs point to the full change on GitHub. **Add an en
 | 17 | 10/30 | 0.8.0 | Check my 0180 report against SEG's final | ROWs and Easements tab; Active Material table holds only major leases (SOLAR/WIND/CARBON/OGML/GRAZING) with TERM; new term field; reading errors corrected | Match SEG's final layout; ~95% → ~98% substance | 69f9635 |
 | 18 | 10/30 | 0.9.0 | Rule to double-check numbers (the 1%/7% mistake) | NUM01: grantee shares must total 100% or the interest conveyed; number words must match digits; per-grantee share field; acreage/interest added to low-confidence check | Catches misread digits without a second reading; found 1.968% read as 1.948% in 809/87 | 1e5425f, f703db4, 345c2a4 |
 | 19 | 10/30 | 0.9.0 | Cache readings so reruns don't re-pay the API | **Deferred.** Logged in docs/BEFORE_GO_LIVE.md with flag-noise tuning | Decide before go-live | a537857 |
-| 20 | 10/30 | 0.9.0 | Keep an audit trail of every change | This file; kept up to date with each change | Review at project end and for future changes | (this commit) |
+| 20 | 10/30 | 0.9.0 | Keep an audit trail of every change | This file; kept up to date with each change | Review at project end and for future changes | 2f23fb8 |
 
 ## Decisions and open items (no code change)
 
