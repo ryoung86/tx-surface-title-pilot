@@ -5,7 +5,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill
 
 HEAD = PatternFill("solid", fgColor="1F3A5F")
-SEVERITY_FILL = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7"}
+SEVERITY_FILL = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7", "mapping": "E4D7F5"}
 
 
 def _table(ws, headers, rows, widths=None):

@@ -494,7 +494,7 @@ def test_title_report_in_seg_format(sample, tmp_path):
     res = run_tract(sample / TRACT, load_config(CONFIG), db, tmp_path / "out", mock=True, log=lambda *_: None)
     wb = openpyxl.load_workbook(res["report"])
     assert wb.sheetnames == ["Ownership ", "Ownership BT Data", "Encumbrances", "Flowchart", "Names Examined",
-                             "Index to All Documents", "Runsheet ", "AI Review", "AI Flags", "AI Supporting Docs"]
+                             "Index to All Documents", "Runsheet ", "AI Review", "AI Mapping", "AI Flags", "AI Supporting Docs"]
     own = wb["Ownership "]
     assert own["C14"].value == TRACT and own["B11"].value == "Smith Ranch LLC"
     assert own["B1"].value == "Schoeffler Energy Group, Inc."                # template boilerplate kept
@@ -526,3 +526,90 @@ def test_name_runsheet_entry_on_tract_abstract_is_listed():
     pk02 = [f.message for f in flags if f.rule_id == "PK02"]
     assert any("2018003814" in m and "this tract's abstract (A-289)" in m for m in pk02)
     assert any(m.startswith("2 other instruments") for m in pk02)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("BEGINNING at a 1/2 inch iron rod; THENCE N 45° 30' E 210.5 feet to a point; THENCE S 44 deg W", True),
+    ("5.60 acres described by metes and bounds in Exhibit A", True),
+    ("being more particularly described by field notes attached", True),
+    ("to the POINT OF BEGINNING and containing 1.00 acre", True),
+    ("268.2 acres in the I & G N Survey No. 4, Abstract 289, Liberty County, Texas", False),
+    ("Lot 4, Block 2, Sunset Acres Subdivision", False),
+    ("", False),
+])
+def test_metes_and_bounds_detection(text, expected):
+    from titlepilot.mapping import is_metes_and_bounds
+    assert is_metes_and_bounds(text) is expected
+
+
+def _conv(iid, acres, legal="", grantor="A", grantee="B", date="2000-01-01"):
+    return {"instrument_id": iid, "category": "conveyance", "acreage": acres, "legal": legal, "grantors": [grantor],
+            "grantees": [grantee], "file_name": iid + ".pdf", "filing_date": date, "ref_keys": {iid}}
+
+
+def test_mapping_items_out_sales_and_exceptions():
+    from types import SimpleNamespace
+    from titlepilot.mapping import mapping_items
+    parent = _conv("V1103P60", 268.2, "268.2 acres in the I&GN Survey 4", date="1990-01-01")
+    vest = _conv("2011-9176", 5.6, "5.60 acres; metes and bounds in Exhibit A", date="2011-01-01")
+    out = _conv("2018-3815", 1.0, "1.00 acre out of the 5.60 acre tract", date="2018-01-01")
+    chain = {"conveyances": [parent, vest, out], "instruments": [parent, vest, out],
+             "vesting_instrument": "2011-9176", "subject_acres": 4.6}
+    intake = SimpleNamespace(legal_description="4.60 acres, LESS AND EXCEPT 1 acre described in Document Number "
+                                               "2018003815; SAVE AND EXCEPT 0.5 acre in Document Number 2020001234",
+                             subject_acres=4.6)
+    items = {i["instrument_id"]: i["reasons"] for i in mapping_items(chain, intake)}
+    assert "V1103P60" not in items
+    assert any("parent tract" in r for r in items["2011-9176"]) and "Metes and bounds description" in items["2011-9176"]
+    assert any("out of the 4.6 ac tract" in r for r in items["2018-3815"])
+    assert any("Excepted" in r for r in items["2018-3815"])
+    assert any("not in the package" in r for r in items[None])
+
+
+def test_mapping_queue_keeps_mapped_rows(tmp_path):
+    import csv
+    from titlepilot.mapping import update_queue
+    item = {"instrument_id": "2018-3815", "reasons": ["Out-sale"], "acres": 1.0, "grantors": ["A"], "grantees": ["B"],
+            "legal": "", "file_name": "x.pdf", "filing_date": None}
+    q = update_queue(tmp_path, "T1", 1, [item])
+    update_queue(tmp_path, "T2", 2, [item])
+    rows = list(csv.DictReader(q.open(encoding="utf-8-sig")))
+    rows[0]["status"], rows[0]["mapped_by"] = "mapped", "JD"
+    with q.open("w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=rows[0].keys()); w.writeheader(); w.writerows(rows)
+    update_queue(tmp_path, "T1", 3, [item, {**item, "instrument_id": "2011-9176"}])   # re-run T1
+    rows = list(csv.DictReader(q.open(encoding="utf-8-sig")))
+    t1 = {r["instrument"]: r for r in rows if r["tract_id"] == "T1"}
+    assert t1["2018-3815"]["status"] == "mapped" and t1["2018-3815"]["run_id"] == "1"   # mapper's work kept
+    assert t1["2011-9176"]["status"] == "open"
+    assert len([r for r in rows if r["tract_id"] == "T2"]) == 1
+
+
+def test_mapping_notification_payloads(monkeypatch):
+    import json
+    from titlepilot import mapping
+    sent = []
+
+    class Resp:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(mapping.urllib.request, "urlopen", lambda req, timeout: sent.append(req) or Resp())
+    item = {"instrument_id": "2018-3815", "reasons": ["Out-sale"], "acres": 1.0}
+    assert mapping.notify("T1", 1, [item]) is None or "TITLEPILOT_MAPPING_WEBHOOK" in __import__("os").environ
+    assert mapping.notify("T1", 1, [item], url="https://example.test/hook") == 200
+    card = json.loads(sent[-1].data)
+    assert card["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
+    mapping.notify("T1", 1, [item], url="https://example.test/hook", fmt="slack")
+    assert "2018-3815" in json.loads(sent[-1].data)["text"]
+    assert mapping.notify("T1", 1, [], url="https://example.test/hook") is None
+
+
+def test_live_shape_run_flags_mapping(sample, tmp_path):
+    res = run_tract(sample / TRACT, load_config(CONFIG), DB(tmp_path / "m.sqlite"), tmp_path / "out", mock=True,
+                    log=lambda *_: None, notify_team=False)
+    assert (tmp_path / "out" / "mapping_queue.csv").exists()
+    assert len([f for f in res["flags"] if f.rule_id == "MP01"]) == len(res["mapping"])
+    import openpyxl
+    assert "AI Mapping" in openpyxl.load_workbook(res["report"]).sheetnames

@@ -91,3 +91,8 @@ rules:
   severity: Low
   enabled: true
   source: code
+- id: MP01
+  name: Out-sale, exception or metes and bounds description needs to be mapped
+  severity: Mapping
+  enabled: true
+  source: code

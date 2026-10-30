@@ -41,6 +41,13 @@ CODE_RULES = [
         "enabled": True,
         "source": "code",
     },
+    {
+        "id": "MP01",
+        "name": "Out-sale, exception or metes and bounds description needs to be mapped",
+        "severity": "Mapping",
+        "enabled": True,
+        "source": "code",
+    },
 ]
 
 

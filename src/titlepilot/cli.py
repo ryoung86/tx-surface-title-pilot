@@ -45,6 +45,7 @@ def main(argv=None):
         s.add_argument("--mock", action="store_true", help="use <file>.mock.json instead of calling the API")
         s.add_argument("--model", default=DEFAULT_MODEL)
         s.add_argument("--force", action="store_true", help="process even if the package check finds problems")
+        s.add_argument("--no-notify", action="store_true", help="don't post the mapping message to Teams/Slack")
 
     s = sub.add_parser("score", help="score the latest run of each tract against an answer key folder")
     s.add_argument("answer_dir")
@@ -73,7 +74,8 @@ def main(argv=None):
             d for d in Path(a.folder).iterdir() if d.is_dir() and d.name != "answer_key")
         for folder in folders:
             print(f"{folder.name}:")
-            res = run_tract(folder, cfg, db, a.out, mock=a.mock, model=a.model, force=a.force)
+            res = run_tract(folder, cfg, db, a.out, mock=a.mock, model=a.model, force=a.force,
+                            notify_team=not a.no_notify)
             if res:
                 owner = ", ".join(res["chain"]["current_owner"]) or "NOT FOUND"
                 print(f"  run {res['run_id']}: {res['instruments']} instruments, current owner {owner}, "
@@ -82,6 +84,21 @@ def main(argv=None):
                     print(f"    [{f.rule_id} {f.severity}] {f.instrument_id or '-'}: {f.message}")
                 if res["skipped"]:
                     print(f"  rules with no check yet: {', '.join(res['skipped'])}")
+                if res["mapping"]:
+                    from .mapping import describe
+                    bar = "  " + "*" * 70
+                    print(bar)
+                    print(f"  MAPPING NEEDED: {len(res['mapping'])} item(s) for {res['tract_id']}")
+                    for m in res["mapping"]:
+                        print(f"    - {describe(m)}")
+                    print(f"  Added to {res['mapping_queue']}")
+                    if res["notified"] is None:
+                        print("  (no Teams/Slack message: set TITLEPILOT_MAPPING_WEBHOOK in .env to send one)")
+                    elif str(res["notified"]).startswith("failed"):
+                        print(f"  Teams/Slack message {res['notified']}")
+                    else:
+                        print("  Teams/Slack message sent")
+                    print(bar)
                 print(f"  title report:    {res['report']}")
                 print(f"  review workbook: {res['review']}")
         return

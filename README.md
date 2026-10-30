@@ -95,7 +95,7 @@ tests/           end-to-end tests on the synthetic tract
 
 ## Status of the rules
 
-Implemented: R01, R06, R12, R13, TS03, TS06, TS07, plus code-only rules PK01 (owner with no record of a name search), PK02/PK03 (runsheet vs uploads) and OW01 (current owner needs review).
+Implemented: R01, R06, R12, R13, TS03, TS06, TS07, plus code-only rules PK01 (owner with no record of a name search), PK02/PK03 (runsheet vs uploads) OW01 (current owner needs review) and MP01 (needs mapping, below).
 
 In config but no check yet (reported as "skipped" on every run): R07, R09, R10, R11, T01, T02, TS01, TS02, TS04, TS05. Add each as a `@rule("ID")` function in `rules.py` once the landmen settle the wording. Some need data the pilot will bring: TS02 needs the project route file, and T01 and T02 need decisions on how homestead and heirship facts are recorded.
 
@@ -112,3 +112,27 @@ In config but no check yet (reported as "skipped" on every run): R07, R09, R10, 
 - The run history refuses updates and deletes. A re-run is a new run linked to the previous one.
 - Keep document images and `runs.sqlite` on SEG-controlled storage. They are excluded from git by `.gitignore`.
 - AI output is never a title opinion; a landman signs off every tract.
+
+
+## Mapping notifications (MP01)
+
+Every run checks for land that needs to be mapped:
+
+- **Out-sales**: a conveyance after the vesting deed that covers less than the tract (for example a 1-acre sale out of a 4.6-acre tract), or the deed that created the tract out of a larger parent tract.
+- **Metes and bounds**: a legal description with courses and distances ("THENCE N 45° 30' E 210 feet"), a point of beginning, field notes or the words "metes and bounds".
+- **Exceptions**: a "LESS AND EXCEPT" or "SAVE AND EXCEPT" in the tract's legal description (tracts.csv or intake form). If the excepted instrument isn't in the package, that is listed too.
+
+Each item shows up in four places:
+
+1. An **MP01 flag** (severity "Mapping", purple) on the AI Flags sheet and in the review workbook.
+2. An **AI Mapping** sheet in the title report (purple tab), with the instrument, reason, acres, parties, legal description and file, plus blank Mapped by / Date mapped / Note columns.
+3. **output/mapping_queue.csv**, one list of open mapping work across all tracts. The mapping person sets `status` to `mapped` (or fills in `mapped_by`) when done; later runs of the same tract keep those rows and only refresh the open ones.
+4. A **"MAPPING NEEDED"** block at the end of the run in the command window, and, if set up, a **Teams or Slack message**.
+
+To send a Teams message, create a workflow in Teams ("Post to a channel when a webhook request is received"), copy its URL and add it to `.env`:
+
+```
+TITLEPILOT_MAPPING_WEBHOOK=https://...the workflow URL...
+```
+
+For Slack, use an incoming webhook URL and also add `TITLEPILOT_WEBHOOK_FORMAT=slack`. Use `--no-notify` on a run to skip the message. A failed message is logged in the run history and does not stop the run.

@@ -8,8 +8,8 @@ Sheets filled, matching the SEG report layout:
   Names Examined     owners in the chain with their ownership periods
   Index to All Documents, Runsheet   every recorded instrument in filing order
 Mineral, NPRI and non-executive sections are left blank: this is a surface report.
-Three AI sheets are added at the end: AI Review (summary and ownership notes), AI Flags,
-AI Supporting Docs. Everything here is a draft for a landman to check and sign.
+AI sheets are added at the end: AI Review (summary and ownership notes), AI Mapping (out-sales and
+metes and bounds tracts to map), AI Flags, AI Supporting Docs. Everything here is a draft for a landman to check and sign.
 """
 import re
 from copy import copy
@@ -20,6 +20,7 @@ import openpyxl
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
+from .mapping import mapping_items
 from .validate import norm_ref
 
 TEMPLATE = Path(__file__).with_name("templates") / "surface_title_report.xlsx"
@@ -344,6 +345,7 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         _fit_width(s, landscape=True)
         return s
 
+    to_map = mapping_items(chain, intake)
     table("AI Review", ["Item", "Value"], [
         ["Status", "AI DRAFT. Not a title opinion. A landman must check every item and sign off."],
         ["Run", str(run_id)], ["Tract", intake.tract_id],
@@ -352,6 +354,7 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         ["Current surface owner", names(owners) or "NOT DETERMINED"],
         ["Vesting instrument", display_ref(vesting) if vesting else None],
         ["Flags", str(len(flags))],
+        ["Mapping needed", f"{len(to_map)} item(s): see AI Mapping" if to_map else "none"],
         ["Ownership notes", "\n".join(m for _, m in chain.get("ownership_notes", [])) or "none"],
         ["Instruments with an unrecognized type", ", ".join(chain["unclassified"]) or "none"],
         ["Instruments with no filing date", ", ".join(chain["undated"]) or "none"],
@@ -359,9 +362,19 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         ["Package problems", "\n".join(problems) or "none"],
         ["Red dates", "On the Index and Runsheet, a red file date is earlier than the effective date: check it."],
     ], [34, 100])
+    by_id = {i["instrument_id"]: i for i in instruments}
+    ms = table("AI Mapping", ["Instrument", "Filed", "Reason", "Acres", "Grantor", "Grantee", "Legal description",
+                              "File", "Mapped by", "Date mapped", "Note"],
+               [[display_ref(by_id[m["instrument_id"]]) if m["instrument_id"] in by_id else "(not in package)",
+                 fmt_date(m["filing_date"]), "\n".join(m["reasons"]), m["acres"], names(m["grantors"]),
+                 names(m["grantees"]), m["legal"], m["file_name"], None, None, None] for m in to_map]
+               or [["Nothing to map", None, None, None, None, None, None, None, None, None, None]],
+               [16, 11, 40, 8, 22, 22, 60, 30, 14, 12, 30])
+    if to_map:
+        ms.sheet_properties.tabColor = "7030A0"
     fs = table("AI Flags", ["Rule", "Severity", "Instrument", "Message", "Reviewer action", "Note"],
                [[f.rule_id, f.severity, f.instrument_id, f.message, None, None] for f in flags], [8, 12, 26, 80, 16, 40])
-    colors = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7"}
+    colors = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7", "mapping": "E4D7F5"}
     for row in fs.iter_rows(min_row=2):
         color = colors.get(str(row[1].value or "").split()[0].lower() if row[1].value else "")
         if color:

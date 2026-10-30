@@ -201,6 +201,14 @@ def ownership_review(ctx, params):
         yield instrument_id, message
 
 
+@rule("MP01")
+def needs_mapping(ctx, params):
+    from .mapping import mapping_items
+    for it in mapping_items(ctx.chain, ctx.intake):
+        acres = f" ({it['acres']:g} ac)" if it["acres"] else ""
+        yield it["instrument_id"], f"Needs mapping{acres}: {'; '.join(it['reasons'])}. Send to mapping/GIS"
+
+
 def run_rules(rules_cfg: list[dict], ctx: Ctx):
     flags, skipped = [], []
     for r in rules_cfg:
