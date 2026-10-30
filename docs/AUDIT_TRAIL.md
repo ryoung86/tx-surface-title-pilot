@@ -28,6 +28,7 @@ Newest at the bottom. Commit IDs point to the full change on GitHub. **Add an en
 
 ## Decisions and open items (no code change)
 
+- **10/30 Landman review doc made** (Surface Title AI Pilot: Landman Review): abbreviated plan without setup steps for reviewing processes with landmen: workflow diagram, report contents, all 25 rules with landman actions and Live/Planned status, results, sign-off, risks and decisions, and this audit trail. Why: landmen need the process, not the build.
 - **10/30 Pilot plan doc retooled** (Texas Surface Title Extraction Pilot Plan): added Progress to date (0143, 0180 results); updated capture (no intake form, runsheets, tracts.csv), page prep, schema (no nulls; pore_space, term, share, document_kind), prompt (numbers in words and digits), API call (schema in prompt, validated in code), commands, ownership assembly (out-sales, undated docs, pore space, mapping), outputs (SEG format, ROWs tab, AI sheets), live workflow, go-live checklist, key risks, two success metrics, and rules PK01–PK04, OW01, MP01, PS01, NUM01 with implementation status. Why: plan matched the original design, not what the build and the test tracts changed.
 
 - **Vesting deeds on 0180:** SEG cites 1279/279 + 1391/371–435; the program cites 1445/892 (correction deed). Owner is the same. Landman's call.
