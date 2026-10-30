@@ -45,7 +45,10 @@ def main(argv=None):
         s.add_argument("--mock", action="store_true", help="use <file>.mock.json instead of calling the API")
         s.add_argument("--model", default=DEFAULT_MODEL)
         s.add_argument("--force", action="store_true", help="process even if the package check finds problems")
-        s.add_argument("--no-notify", action="store_true", help="don't post the mapping message to Teams/Slack")
+        s.add_argument("--no-notify", action="store_true", help="don't send the mapping email or Teams/Slack message")
+
+    s = sub.add_parser("test-email", help="send a sample mapping email to check the .env email settings")
+    s.add_argument("to", nargs="?", help="address to send to (default: TITLEPILOT_MAPPING_EMAIL)")
 
     s = sub.add_parser("score", help="score the latest run of each tract against an answer key folder")
     s.add_argument("answer_dir")
@@ -62,6 +65,20 @@ def main(argv=None):
         from .sample import make_sample_tract
         dest = make_sample_tract(a.dest, a.mode)
         print(f"Sample tract in {dest}/. Try: titlepilot run {dest}/TX-SAMPLE-001 --mock")
+        return
+
+    if a.cmd == "test-email":
+        from .mapping import email
+        item = {"instrument_id": "TEST-0001", "reasons": ["Test message: no action needed"], "acres": 1.0,
+                "grantors": ["Grantor"], "grantees": ["Grantee"], "legal": "Sample legal description",
+                "file_name": None, "filing_date": None}
+        try:
+            result = email("TEST-TRACT", 0, [item], None, to=a.to)
+        except Exception as e:
+            print(f"Email FAILED: {e}")
+            raise SystemExit(1)
+        print(f"Email {result}" if result else "No address: set TITLEPILOT_MAPPING_EMAIL in .env or give one: "
+                                               "titlepilot test-email you@segland.com")
         return
 
     db = DB(a.db)
@@ -92,12 +109,10 @@ def main(argv=None):
                     for m in res["mapping"]:
                         print(f"    - {describe(m)}")
                     print(f"  Added to {res['mapping_queue']}")
-                    if res["notified"] is None:
-                        print("  (no Teams/Slack message: set TITLEPILOT_MAPPING_WEBHOOK in .env to send one)")
-                    elif str(res["notified"]).startswith("failed"):
-                        print(f"  Teams/Slack message {res['notified']}")
-                    else:
-                        print("  Teams/Slack message sent")
+                    for channel, result in res["notified"]:
+                        print(f"  {channel} {result}")
+                    if not res["notified"]:
+                        print("  (no message sent: set TITLEPILOT_MAPPING_EMAIL or TITLEPILOT_MAPPING_WEBHOOK in .env)")
                     print(bar)
                 print(f"  title report:    {res['report']}")
                 print(f"  review workbook: {res['review']}")

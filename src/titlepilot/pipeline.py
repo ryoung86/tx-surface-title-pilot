@@ -9,7 +9,7 @@ from .extract import DEFAULT_MODEL, Extractor
 from .export import export_review
 from .report import write_report
 from .intake import acres_in, check_package, find_tract_list, load_package, load_tract_list
-from .mapping import mapping_items, notify, update_queue
+from .mapping import mapping_items, send_notifications, update_queue
 from .pages import to_pages
 from .rules import Ctx, run_rules
 from .validate import norm_date, norm_ref, normalize, schema_errors
@@ -135,18 +135,15 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
 
     to_map = mapping_items(chain, intake)
     queue = update_queue(out_dir, intake.tract_id, run_id, to_map, folder)
-    notified = None
+    notified = []
     if to_map:
         db.event(run_id, "mapping_requested", json.dumps([{"instrument": m["instrument_id"], "reasons": m["reasons"]}
                                                           for m in to_map]))
         if notify_team:
-            try:
-                notified = notify(intake.tract_id, run_id, to_map, report)
-                if notified:
-                    db.event(run_id, "mapping_notified", str(notified))
-            except Exception as e:  # a failed message should not lose the run
-                notified = f"failed: {e}"
-                db.event(run_id, "mapping_notify_failed", str(e))
+            notified = send_notifications(intake.tract_id, run_id, to_map, report)
+            for channel, result in notified:
+                db.event(run_id, "mapping_notify_failed" if result.startswith("FAILED") else "mapping_notified",
+                         f"{channel}: {result}")
     return {"run_id": run_id, "tract_id": intake.tract_id, "instruments": len(instruments),
             "chain": chain, "flags": flags, "skipped": skipped, "review": review, "report": report,
             "mapping": to_map, "mapping_queue": queue, "notified": notified}

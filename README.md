@@ -127,7 +127,28 @@ Each item shows up in four places:
 1. An **MP01 flag** (severity "Mapping", purple) on the AI Flags sheet and in the review workbook.
 2. An **AI Mapping** sheet in the title report (purple tab), with the instrument, reason, acres, parties, legal description and file, plus blank Mapped by / Date mapped / Note columns.
 3. **output/mapping_queue.csv**, one list of open mapping work across all tracts. The mapping person sets `status` to `mapped` (or fills in `mapped_by`) when done; later runs of the same tract keep those rows and only refresh the open ones.
-4. A **"MAPPING NEEDED"** block at the end of the run in the command window, and, if set up, a **Teams or Slack message**.
+4. A **"MAPPING NEEDED"** block at the end of the run in the command window, and, if set up, an **email** and/or a **Teams or Slack message**.
+
+### Email
+
+Add the address (or several, separated by commas) to `.env`:
+
+```
+TITLEPILOT_MAPPING_EMAIL=mapping@segland.com
+```
+
+The email lists each item and attaches the title report. By default it is sent from the Outlook account signed in on the PC running titlepilot, so no password is stored. To send through a mail server instead, fill in the SMTP lines in `.env.example` (Microsoft 365: `smtp.office365.com`, port 587; your IT admin may need to allow SMTP sending for the account).
+
+Check the setup without running a tract:
+
+```
+titlepilot test-email
+titlepilot test-email someone@segland.com
+```
+
+If the email can't be sent, the run still finishes; the failure is printed and saved in the run history.
+
+### Teams or Slack
 
 To send a Teams message, create a workflow in Teams ("Post to a channel when a webhook request is received"), copy its URL and add it to `.env`:
 

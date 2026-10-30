@@ -9,7 +9,8 @@ An instrument goes on the mapping list when:
 
 Each run writes the items to the report (AI Mapping sheet), to a MP01 flag, and to
 mapping_queue.csv in the output folder, which holds every tract's open mapping work.
-If TITLEPILOT_MAPPING_WEBHOOK is set (in .env), a message is also posted to Teams or Slack.
+If TITLEPILOT_MAPPING_WEBHOOK is set (in .env), a message is also posted to Teams or Slack, and if
+TITLEPILOT_MAPPING_EMAIL is set, an email is sent (through Outlook on this PC, or an SMTP server).
 """
 import csv
 import json
@@ -152,3 +153,88 @@ def notify(tract_id, run_id, items, report_path=None, url=None, fmt=None):
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=15) as r:
         return r.status
+
+
+def _recipients(value) -> list[str]:
+    return [a.strip() for a in re.split(r"[;,]", value or "") if a.strip()]
+
+
+def _email_text(tract_id, run_id, items, report_path):
+    subject = f"Mapping needed: {tract_id} ({len(items)} item{'s' if len(items) != 1 else ''})"
+    lines = [f"Title run {run_id} for tract {tract_id} found land that needs to be mapped:", ""]
+    for i in items:
+        lines.append(f"- {describe(i)}")
+        if i.get("acres"):
+            lines.append(f"    Acres: {i['acres']:g}")
+        if i.get("grantors") or i.get("grantees"):
+            lines.append(f"    {', '.join(i.get('grantors') or []) or '?'} to {', '.join(i.get('grantees') or []) or '?'}")
+        if i.get("legal"):
+            lines.append(f"    Legal: {i['legal']}")
+        if i.get("file_name"):
+            lines.append(f"    File: {i['file_name']}")
+    lines += ["", "The title report is attached; see its AI Mapping sheet. When mapped, set the row's status to "
+              "'mapped' in mapping_queue.csv.", "", "Sent automatically by titlepilot. This is an AI draft for review."]
+    return subject, "\n".join(lines)
+
+
+def email(tract_id, run_id, items, report_path=None, to=None, method=None):
+    """Email the mapping list. Returns None when no address is set.
+
+    method 'outlook' sends from the Outlook account signed in on this PC (no password needed;
+    Windows only, uses pywin32). method 'smtp' uses TITLEPILOT_SMTP_HOST/PORT/USER/PASSWORD/FROM.
+    Default: smtp when TITLEPILOT_SMTP_HOST is set, otherwise outlook."""
+    to = _recipients(to or os.environ.get("TITLEPILOT_MAPPING_EMAIL"))
+    if not to or not items:
+        return None
+    env = os.environ.get
+    method = (method or env("TITLEPILOT_EMAIL_METHOD") or ("smtp" if env("TITLEPILOT_SMTP_HOST") else "outlook")).lower()
+    subject, body = _email_text(tract_id, run_id, items, report_path)
+    attach = Path(report_path) if report_path and Path(report_path).exists() else None
+
+    if method == "outlook":
+        try:
+            import win32com.client  # pywin32, installed with titlepilot on Windows
+        except ImportError as e:
+            raise RuntimeError("Outlook sending needs Windows with Outlook and pywin32 "
+                               "(pip install pywin32), or set TITLEPILOT_SMTP_HOST to use SMTP") from e
+        mail = win32com.client.Dispatch("Outlook.Application").CreateItem(0)
+        mail.To, mail.Subject, mail.Body = "; ".join(to), subject, body
+        if attach:
+            mail.Attachments.Add(str(attach.resolve()))
+        mail.Send()
+        return f"sent to {', '.join(to)} (Outlook)"
+
+    import smtplib
+    from email.message import EmailMessage
+    host, port = env("TITLEPILOT_SMTP_HOST"), int(env("TITLEPILOT_SMTP_PORT") or 587)
+    user, password = env("TITLEPILOT_SMTP_USER"), env("TITLEPILOT_SMTP_PASSWORD")
+    sender = env("TITLEPILOT_EMAIL_FROM") or user
+    if not host or not sender:
+        raise RuntimeError("SMTP sending needs TITLEPILOT_SMTP_HOST and TITLEPILOT_EMAIL_FROM (or TITLEPILOT_SMTP_USER)")
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"] = sender, ", ".join(to), subject
+    msg.set_content(body)
+    if attach:
+        msg.add_attachment(attach.read_bytes(), maintype="application",
+                           subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=attach.name)
+    with (smtplib.SMTP_SSL(host, port, timeout=30) if port == 465 else smtplib.SMTP(host, port, timeout=30)) as smtp:
+        if port != 465:
+            smtp.starttls()
+        if user and password:
+            smtp.login(user, password)
+        smtp.send_message(msg)
+    return f"sent to {', '.join(to)}"
+
+
+def send_notifications(tract_id, run_id, items, report_path=None) -> list[tuple[str, str]]:
+    """Send every notification that is set up. Returns (channel, result) pairs; a failure is
+    reported, not raised, so the run is never lost over a message."""
+    results = []
+    for channel, fn in (("Teams/Slack message", notify), ("Email", email)):
+        try:
+            r = fn(tract_id, run_id, items, report_path)
+            if r is not None:
+                results.append((channel, "sent" if channel != "Email" else r))
+        except Exception as e:
+            results.append((channel, f"FAILED: {e}"))
+    return results

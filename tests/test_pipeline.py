@@ -613,3 +613,60 @@ def test_live_shape_run_flags_mapping(sample, tmp_path):
     assert len([f for f in res["flags"] if f.rule_id == "MP01"]) == len(res["mapping"])
     import openpyxl
     assert "AI Mapping" in openpyxl.load_workbook(res["report"]).sheetnames
+
+
+def _map_item():
+    return {"instrument_id": "2018-3815", "reasons": ["Out-sale: 1 ac out of the 4.6 ac tract"], "acres": 1.0,
+            "grantors": ["Alvaro Banda"], "grantees": ["Alvaro Banda, Jr."], "legal": "1.00 acre out of A-289",
+            "file_name": "OPR_2018003815_WD.pdf", "filing_date": "2018-02-20"}
+
+
+def test_no_email_without_address(monkeypatch):
+    from titlepilot import mapping
+    for k in ("TITLEPILOT_MAPPING_EMAIL", "TITLEPILOT_MAPPING_WEBHOOK"):
+        monkeypatch.delenv(k, raising=False)
+    assert mapping.email("T1", 1, [_map_item()]) is None
+    assert mapping.send_notifications("T1", 1, [_map_item()]) == []
+
+
+def test_email_by_smtp_with_report_attached(monkeypatch, tmp_path):
+    from titlepilot import mapping
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout): sent["server"] = (host, port)
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def starttls(self): sent["tls"] = True
+        def login(self, u, p): sent["login"] = u
+        def send_message(self, msg): sent["msg"] = msg
+
+    import smtplib
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    for k, v in {"TITLEPILOT_MAPPING_EMAIL": "a@segland.com; b@segland.com", "TITLEPILOT_SMTP_HOST": "smtp.office365.com",
+                 "TITLEPILOT_SMTP_USER": "me@segland.com", "TITLEPILOT_SMTP_PASSWORD": "x"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("TITLEPILOT_MAPPING_WEBHOOK", raising=False)
+    monkeypatch.delenv("TITLEPILOT_EMAIL_METHOD", raising=False)
+    report = tmp_path / "T1_title_report.xlsx"
+    report.write_bytes(b"xlsx")
+    res = mapping.send_notifications("T1", 7, [_map_item()], report)
+    assert res == [("Email", "sent to a@segland.com, b@segland.com")]
+    msg = sent["msg"]
+    assert sent["server"] == ("smtp.office365.com", 587) and sent["tls"] and sent["login"] == "me@segland.com"
+    assert msg["To"] == "a@segland.com, b@segland.com" and "Mapping needed: T1" in msg["Subject"]
+    assert "2018-3815" in msg.get_body().get_content()
+    assert [a.get_filename() for a in msg.iter_attachments()] == ["T1_title_report.xlsx"]
+
+
+def test_email_failure_does_not_stop_run(monkeypatch):
+    import sys
+    from titlepilot import mapping
+    monkeypatch.setenv("TITLEPILOT_MAPPING_EMAIL", "a@segland.com")
+    monkeypatch.delenv("TITLEPILOT_SMTP_HOST", raising=False)
+    monkeypatch.delenv("TITLEPILOT_EMAIL_METHOD", raising=False)
+    monkeypatch.delenv("TITLEPILOT_MAPPING_WEBHOOK", raising=False)
+    monkeypatch.setitem(sys.modules, "win32com", None)      # no Outlook here
+    monkeypatch.setitem(sys.modules, "win32com.client", None)
+    (channel, result), = mapping.send_notifications("T1", 1, [_map_item()])
+    assert channel == "Email" and result.startswith("FAILED") and "Outlook" in result
