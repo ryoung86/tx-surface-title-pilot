@@ -26,6 +26,9 @@ from .validate import norm_ref
 TEMPLATE = Path(__file__).with_name("templates") / "surface_title_report.xlsx"
 
 ABBREVIATIONS = [  # (keyword in the instrument type, abbreviation used on SEG runsheets); first match wins
+    ("carbon dioxide storage", "CO2 Storage Lease"), ("storage lease", "Storage Lease"), ("solar easement", "Solar Lease"),
+    ("wind energy", "Wind Lease"), ("ground lease", "Lease"), ("land lease", "Lease"), ("timber", "Timber Deed"),
+    ("accommodation", "Accom. Agmt."), ("possession and use", "P&U Agmt."), ("surface agreement", "Surface Agmt."),
     ("special warranty", "SWD"), ("warranty deed", "WD"), ("deed of gift", "GD"), ("gift deed", "GD"),
     ("quitclaim", "QCD"), ("deed without warranty", "DWW"), ("deed of trust", "DT"), ("release", "Rel"),
     ("right-of-way", "ROW"), ("right of way", "ROW"), ("easement", "Esmt"), ("ucc", "UCC"),
@@ -59,7 +62,11 @@ def display_ref(inst) -> str:
 
 
 def record_type(inst) -> str:
-    """Deed Records for volume/page references, Official Public Records for instrument numbers."""
+    """The agent's own label when the file name starts with one (DR_..., OPR_...); otherwise Deed Records
+    for volume/page references and Official Public Records for instrument numbers."""
+    m = re.match(r"(DR|OPR|OR|DT|PR)[ _]", Path(str(inst.get("file_name") or "")).name, re.I)
+    if m:
+        return m.group(1).upper()
     return "DR" if norm_ref(inst.get("instrument_id")).startswith("V") else "OPR"
 
 
@@ -222,12 +229,16 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     mortgages = [e for e in current if is_mortgage(e)]
     roads = [e for e in current if e["category"] == "easement" and "road" in f"{e['type']} {e.get('easements')}".lower()]
     rails = [e for e in current if "rail" in f"{e['type']} {e.get('easements')}".lower() and e not in roads]
-    leases = [e for e in current if e["category"] == "surface agreement"]
-    other = [e for e in current if e not in mortgages + roads + rails + leases]
+    pore = [e for e in current if e["category"] == "pore space agreement"]
+    # Leases first (solar, wind, ground, pipeline site), then other surface agreements such as
+    # accommodation agreements, so the table's nine rows hold the leases.
+    leases = sorted([e for e in current if e["category"] == "surface agreement"],
+                    key=lambda e: (0 if "lease" in e["type"] or "timber" in e["type"] else 1, e["filing_date"] or ""))
+    other = [e for e in current if e not in mortgages + roads + rails + leases + pore]
 
     # Burdens created inside conveyances: reserved easements and deed restrictions (rights of first
     # refusal, use covenants). They aren't separate instruments, so they're listed as text lines.
-    deed_lines_roads, deed_lines_other = [], []
+    deed_lines_roads, deed_lines_other, deed_lines_pore = [], [], []
     for c in chain["conveyances"]:
         tag = f"{abbrev(c['type'])} - {record_type(c)} {display_ref(c)}, dated {fmt_date(c.get('execution_date') or c['filing_date'])}"
         if c.get("easements"):
@@ -236,14 +247,17 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         if c.get("restrictions"):
             deed_lines_other.append(f"{tag} - {c['restrictions']}")
         if c.get("pore_space"):
-            deed_lines_other.append(f"{tag} - pore space: {c['pore_space']}")
+            deed_lines_pore.append(f"{tag} - pore space: {c['pore_space']}")
 
     for n, e in enumerate(leases[:9]):
         for c, v in zip("BCDEFGHI", [abbrev(e["type"]), names(e["grantors"]), names(e["grantees"]),
                                      as_date(e.get("execution_date") or e["filing_date"]), None, display_ref(e),
                                      "Open", e.get("legal")]):
             ws[f"{c}{5 + n}"] = v
-    ws["C6"] = None if leases else "None"
+    if not leases:
+        ws["C6"] = "None"
+    elif len(leases) == 1:
+        ws["C6"] = None          # clear the template's placeholder
     for n, e in enumerate(mortgages[:3]):
         for c, v in zip("BCDEFGHI", [abbrev(e["type"]), names(e["grantors"]), names(e["grantees"]),
                                      as_date(e.get("execution_date") or e["filing_date"]), None, display_ref(e), None,
@@ -252,8 +266,8 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     if not mortgages:
         ws["C18"] = "None"
     other += mortgages[3:] + leases[9:]
-    extra = {"B29": deed_lines_roads, "B44": deed_lines_other}
-    for cell, items in (("B24", []), ("B29", roads), ("B34", rails), ("B39", []), ("B44", other)):
+    extra = {"B24": deed_lines_pore, "B29": deed_lines_roads, "B44": deed_lines_other}
+    for cell, items in (("B24", pore), ("B29", roads), ("B34", rails), ("B39", []), ("B44", other)):
         lines = [text(e) for e in items] + extra.get(cell, [])
         ws[cell] = "\n".join(lines) if lines else "None"
         ws[cell].alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")

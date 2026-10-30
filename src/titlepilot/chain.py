@@ -12,7 +12,8 @@ ENCUMBRANCE_CATEGORIES = {"lien", "judgment", "easement", "restriction", "surfac
 
 CONVEYANCE_KEYWORDS = ("warranty deed", "quitclaim", "deed without warranty", "tax deed", "sheriff",
                        "heirship", "probate", "executor's deed", "trustee's deed", "gift deed", "deed of gift",
-                       "deed of conveyance", "cash sale", "general warranty", "special warranty")
+                       "deed of conveyance", "cash sale", "general warranty", "special warranty", "correction deed",
+                       "corrective deed")
 PARTIAL_AREA = 0.95   # a conveyance under 95% of the tract's acreage is treated as covering only part of it
 
 
@@ -32,11 +33,15 @@ def classify(itype: str) -> str:
     if ("deed of trust" in t or "mortgage" in t or "lien" in t
             or re.search(r"\bucc\b", t) or "financing statement" in t):
         return "lien"
+    if ("lease" in t and not re.search(r"oil|gas|mineral", t)) or "surface agreement" in t or "possession and use" in t:
+        return "surface agreement"       # land, solar, wind and ground leases come before the easement check
     if "easement" in t or "right-of-way" in t or "right of way" in t or re.search(r"\brow\b", t):
         return "easement"
     if "restriction" in t or "covenant" in t:
         return "restriction"
-    if "surface lease" in t or "surface use" in t or "damage" in t:
+    if ("surface lease" in t or "surface use" in t or "damage" in t or "timber" in t or "accommodation" in t
+            or "wind" in t or "solar" in t or "ground lease" in t
+            or ("lease" in t and not re.search(r"oil|gas|mineral", t))):
         return "surface agreement"
     if t == "deed" or any(k in t for k in CONVEYANCE_KEYWORDS):
         return "conveyance"
@@ -88,12 +93,16 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
     conveyance is used and a review note is added when it looks smaller than the one before."""
     supporting = [i for i in instruments if not i.get("recorded", True)]
     recorded = [i for i in instruments if i.get("recorded", True)]
-    ordered = sorted(recorded, key=lambda i: (i["filing_date"] is None, i["filing_date"] or ""))
+    # Filing order; an instrument with no filing date read goes by the date it was signed, and one with
+    # neither goes last and is never taken as the vesting deed (a late-recorded probate, say, must not
+    # look like the newest conveyance).
+    when = lambda i: i["filing_date"] or i.get("execution_date")
+    ordered = sorted(recorded, key=lambda i: (when(i) is None, when(i) or ""))
     conveyances = [i for i in ordered if i["category"] == "conveyance"]
     released = {r for i in ordered if i["category"] == "release" for r in i["refers_to"]}
     notes = []
 
-    whole = [c for c in conveyances if not is_fractional(c) and not is_partial_area(c, subject_acres)]
+    whole = [c for c in conveyances if not is_fractional(c) and not is_partial_area(c, subject_acres) and when(c)]
     vesting = whole[-1] if whole else (conveyances[-1] if conveyances else None)
     if vesting is not None:
         later = conveyances[conveyances.index(vesting) + 1:]

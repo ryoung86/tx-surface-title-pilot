@@ -1,5 +1,6 @@
 """Run one tract folder end to end."""
 import json
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -13,6 +14,41 @@ from .mapping import mapping_items, send_notifications, update_queue
 from .pages import to_pages
 from .rules import Ctx, run_rules
 from .validate import norm_date, norm_ref, normalize, schema_errors
+
+
+_FILE_REF = re.compile(r"^(?:DR|OPR|OR|PR|DT)[ _](?:(\d{4}0\d{5})(?!\d)|(\d{1,4})\s*[_+\- ]\s*(\d{1,4})(?!\d))", re.I)
+
+
+def ref_from_file_name(name):
+    """The recording reference an agent put in a file name, e.g. DR_703_445_DEED.pdf -> Vol. 703, Page 445."""
+    m = _FILE_REF.match(Path(name).name)
+    if not m:
+        return None
+    return m.group(1) if m.group(1) else f"Vol. {m.group(2)}, Page {m.group(3)}"
+
+
+def check_files(instruments):
+    """The same instrument uploaded in two files is read once; a file whose name gives a different
+    recording reference than the document itself is reported."""
+    kept, notes, seen = [], [], {}
+    for i in instruments:
+        if not i.get("recorded", True):
+            kept.append(i)
+            continue
+        key = norm_ref(i["instrument_id"])
+        named = ref_from_file_name(i["file_name"])
+        if key and key in seen:
+            notes.append((i["instrument_id"], f"{i['file_name']} is the same instrument as {seen[key]} "
+                                              f"({i['instrument_id']}); read once. Check whether the agent meant "
+                                              f"to upload {named or 'a different instrument'}"))
+            continue
+        if key:
+            seen[key] = i["file_name"]
+        if named and key and norm_ref(named) != key and norm_ref(named) not in i["ref_keys"]:
+            notes.append((i["instrument_id"], f"File name {i['file_name']} says {named}, but the document is "
+                                              f"{i['instrument_id']}"))
+        kept.append(i)
+    return kept, notes
 
 
 def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL, force=False, log=print,
@@ -108,6 +144,10 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
         what = norm['type'] or 'unknown type' if norm["recorded"] else f"{norm['kind']} (not a recorded instrument)"
         log(f"  [{n}/{len(docs)}] {doc.file_name}: {what}, "
             f"{len(pages)} page(s), {time.monotonic() - started:.0f}s" + (f" ({'; '.join(notes)})" if notes else ""))
+
+    instruments, intake.file_checks = check_files(instruments)
+    for _, m in intake.file_checks:
+        log(f"  FILES: {m}")
 
     # Dates the AI couldn't read can come from the agent's runsheet.
     by_ref = {norm_ref(e.get("recording_ref")): e for e in intake.runsheet_entries if e.get("recording_ref")}

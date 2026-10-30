@@ -44,8 +44,13 @@ RUNSHEET_SCHEMA = {
                     "grantor": {"type": "string"},
                     "grantee": {"type": "string"},
                     "legal": {"type": "string", "description": "Legal description or survey/abstract, as shown"},
+                    "agent_note": {"type": "string", "description":
+                                   "The agent's own mark or note on whether the entry pertains to the tract, as "
+                                   "shown (e.g. a C/X/* column, 'not subject property', 'pertains, not included'); "
+                                   "'' if none"},
                 },
-                "required": ["recording_ref", "instrument_type", "filing_date", "grantor", "grantee", "legal"],
+                "required": ["recording_ref", "instrument_type", "filing_date", "grantor", "grantee", "legal",
+                             "agent_note"],
                 "additionalProperties": False,
             },
         },
@@ -63,6 +68,10 @@ RUNSHEET_PROMPT = """This is a title agent's runsheet (document index) for a tra
 - In owners_searched, list the names the runsheet says were searched by name (for liens, judgments and the like).
   Use an empty list if it doesn't say. Do not guess from the grantor and grantee columns.
 - Do not add instruments that aren't on the runsheet.
+- agent_note: if the agent marked whether an entry pertains (a Copied column such as C = copied, X = not
+  pertaining, * = pertains but not included, or notes such as "not subject property" or "instrument pertains,
+  but was not included"), write what the mark means in words, e.g. "copied", "not pertaining",
+  "not subject property", "pertains, not included". Use the runsheet's own legend if it has one. Else "".
 - runsheet_kind: "tract" if it lists the chain for one piece of land; "name" if it lists what was found by
   searching one or more people's names (then put those names in owners_searched).
 - subject_acreage and subject_description: the tract's acreage and description if the runsheet shows them, else ""."""
@@ -98,7 +107,8 @@ def salvage_runsheet(text: str) -> dict:
             continue
         if isinstance(e, dict) and e.get("recording_ref"):
             out["entries"].append({k: str(e.get(k, "")) for k in
-                                   ("recording_ref", "instrument_type", "filing_date", "grantor", "grantee", "legal")})
+                                   ("recording_ref", "instrument_type", "filing_date", "grantor", "grantee", "legal",
+                                    "agent_note")})
     return out
 
 

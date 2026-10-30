@@ -142,6 +142,13 @@ def test_sample_pdfs_show_release_reference_and_exception(sample):
     ("Warranty Deed", "conveyance"), ("Special Warranty Deed", "conveyance"), ("Quitclaim Deed", "conveyance"),
     ("Affidavit of Heirship", "conveyance"), ("Deed", "conveyance"), ("Plat", "other"), ("", "unknown"),
     ("UCC Financing Statement", "lien"), ("UCC", "lien"), ("Gift Deed", "conveyance"),
+    ("Timber Deed", "surface agreement"), ("Memorandum of Lease", "surface agreement"),
+    ("Amendment to Ground Lease", "surface agreement"), ("Oil, Gas and Mineral Lease", "other"),
+    ("Surface Use and Accommodation Agreement", "surface agreement"),
+    ("Memorandum of Land Lease and Solar Easement", "surface agreement"), ("Surface Agreement", "surface agreement"),
+    ("Possession and Use Agreement for Transportation Purposes", "surface agreement"),
+    ("Grant of Easement and Easement Agreement for Transmission Facilities", "easement"),
+    ("Memorandum of Carbon Dioxide Storage Lease and Easement Agreement", "pore space agreement"),
 ])
 def test_instrument_type_categories(raw, category):
     from titlepilot.chain import classify
@@ -412,7 +419,7 @@ class _FakeClient:
 
 
 def _entry(ref, t="WD", g1="Grace Willis Dunagan", g2="Someone"):
-    return {"recording_ref": ref, "instrument_type": t, "filing_date": "", "grantor": g1, "grantee": g2, "legal": ""}
+    return {"recording_ref": ref, "instrument_type": t, "filing_date": "", "grantor": g1, "grantee": g2, "legal": "", "agent_note": ""}
 
 
 def test_salvage_keeps_complete_entries_from_cut_off_reply():
@@ -738,3 +745,114 @@ def test_report_fills_pore_space_section(sample, tmp_path):
                     log=lambda *_: None, notify_team=False)
     ws = openpyxl.load_workbook(res["report"])["Ownership "]
     assert ws["B35"].value == ws["B28"].value == "Smith Ranch LLC"
+
+
+def test_pk02_uses_agent_marks_and_dedupes():
+    from types import SimpleNamespace
+    from titlepilot.rules import Ctx, run_rules
+    e = lambda ref, note, legal="Robert Burrell Survey, A-138", kind="name": {
+        "recording_ref": ref, "instrument_type": "Deed of Trust", "grantor": "HENDERSON", "grantee": "X",
+        "legal": legal, "agent_note": note, "_kind": kind, "_names": "Henderson", "_file": "rs.pdf"}
+    intake = SimpleNamespace(legal_description="253.27 acres, Robert Burrell Survey, Abstract 138",
+                             runsheet_entries=[e("Vol. 1279, Page 312", "pertains, not included"),
+                                               e("Vol. 708, Page 8", "not pertaining (agent: not subject property)"),
+                                               e("Vol. 900, Page 1", ""), e("Vol. 900, Page 1", "")])
+    flags, _ = run_rules([{"id": "PK02", "severity": "High"}], Ctx([], {}, intake))
+    msgs = [f.message for f in flags]
+    assert any("marked this as pertaining" in m and "1279" in m for m in msgs)
+    assert not any("Vol. 708, Page 8" in m for m in msgs)
+    assert any("1 runsheet entries" in m and "not pertaining" in m for m in msgs)
+    assert sum("Vol. 900, Page 1" in m for m in msgs) == 1
+
+
+@pytest.mark.parametrize("name,ref", [
+    ("DR_703_445_DEED.pdf", "Vol. 703, Page 445"), ("OPR_2023022342_MEMOCARBON.pdf", "2023022342"),
+    ("DR_1357+859_EASEMENT.pdf", "Vol. 1357, Page 859"), ("DR_810-367_SWD.pdf", "Vol. 810, Page 367"),
+    ("OPR_1676_272_AGREEMENT.pdf", "Vol. 1676, Page 272"), ("Banda_Alvaro_Name Runsheet.pdf", None),
+])
+def test_ref_from_file_name(name, ref):
+    from titlepilot.pipeline import ref_from_file_name
+    assert ref_from_file_name(name) == ref
+
+
+def test_duplicate_upload_read_once():
+    from titlepilot.pipeline import check_files
+    mk = lambda f, iid: {"file_name": f, "instrument_id": iid, "recorded": True,
+                         "ref_keys": {__import__("titlepilot.validate", fromlist=["x"]).norm_ref(iid)}}
+    kept, notes = check_files([mk("DR_703_443_DEED.pdf", "Vol. 703, Page 443"),
+                               mk("DR_703_445_DEED.pdf", "Vol. 703, Page 443"),
+                               mk("DR_708_34_WD.pdf", "Vol. 708, Page 34"),
+                               mk("DR_655_406_DEED.pdf", "Vol. 655, Page 405")])
+    assert [k["file_name"] for k in kept] == ["DR_703_443_DEED.pdf", "DR_708_34_WD.pdf", "DR_655_406_DEED.pdf"]
+    assert len(notes) == 2 and "same instrument" in notes[0][1] and "says Vol. 655, Page 406" in notes[1][1]
+
+
+def test_mapping_skips_large_parent_tract_metes_and_bounds():
+    from types import SimpleNamespace
+    from titlepilot.mapping import mapping_items
+    big = _conv("V1445P892", 13807, "13,807 acres described by metes and bounds in Exhibit I", date="1992-12-28")
+    esmt = {**_conv("2004-3233", None, "BEGINNING at a point; THENCE N 10 deg E 100 feet to a point", date="2004-03-02"),
+            "category": "easement"}
+    chain = {"conveyances": [big], "instruments": [big, esmt], "vesting_instrument": "V1445P892", "subject_acres": 253.27}
+    assert mapping_items(chain, SimpleNamespace(legal_description="253.27 acres", subject_acres=253.27)) == []
+
+
+def test_undated_probate_is_not_taken_as_vesting():
+    from titlepilot.chain import build_chain
+    chain = build_chain([
+        _inst("A", "warranty deed", "1965-12-15", "Zipp", "Martha Willis Hudson", acres=None),
+        _inst("B", "correction deed", "1992-12-28", "Edmond A. Henderson", "Henderson Partners, Ltd.", acres=13807),
+        _inst("P", "probate", None, "Joseph Taylor Hudson, deceased", "Martha Willis Hudson", acres=None),
+    ], 253.27)
+    assert chain["current_owner"] == ["Henderson Partners, Ltd."]
+    chain = build_chain([
+        _inst("A", "warranty deed", "1965-12-15", "Zipp", "Martha Willis Hudson", acres=None),
+        _inst("B", "correction deed", "1992-12-28", "Edmond A. Henderson", "Henderson Partners, Ltd.", acres=13807),
+        {**_inst("P", "probate", None, "Joseph Taylor Hudson, deceased", "Martha Willis Hudson", acres=None),
+         "execution_date": "1969-04-11"},
+    ], 253.27)
+    assert chain["current_owner"] == ["Henderson Partners, Ltd."]
+    assert [c["instrument_id"] for c in chain["conveyances"]] == ["A", "P", "B"]
+
+
+@pytest.mark.parametrize("a,b,same", [
+    ("Clarence Mayer, Jr.", "MAYER CLARENCE", True), ("C. E. Mayer Co.", "C E MAYER (MEYER) CO", True),
+    ("Jon Totz", "TOTZ JOHN (JON)", True), ("PIC Realty Corporation", "PIC REALTY", True),
+    ("Henderson Partners, Ltd.", "HENDERSON EDMOND A", False), ("Amy C. Henderson", "HENDERSON DANIEL F", False),
+])
+def test_same_person(a, b, same):
+    from titlepilot.rules import same_person
+    assert same_person(a, b) is same
+
+
+def test_runsheet_found_by_folder_name(tmp_path):
+    from titlepilot.intake import is_runsheet
+    d = tmp_path / "T1" / "INFORMATIVE FOLDER" / "NAME RUNSHEETS"
+    d.mkdir(parents=True)
+    f = d / "LAPIN JACK 9-30-1977 - 10-9-1980.Liberty.pdf"
+    f.write_bytes(b"%PDF")
+    assert is_runsheet(f)
+    assert not is_runsheet(tmp_path / "T1" / "CHAIN OF TITLE" / "DR_708_34_WD.pdf")
+
+
+def test_pk02_marked_entry_wins_over_unmarked_duplicate():
+    from types import SimpleNamespace
+    from titlepilot.rules import Ctx, run_rules
+    base = {"recording_ref": "Vol. 1279, Page 312", "instrument_type": "Deed of Trust", "grantor": "HENDERSON",
+            "grantee": "PRUDENTIAL", "legal": "SEE INSTRUMENT", "_kind": "name", "_names": "A, B, C"}
+    intake = SimpleNamespace(legal_description="Robert Burrell Survey, Abstract 138",
+                             runsheet_entries=[{**base, "agent_note": ""}, {**base, "agent_note": "pertains, not included"}])
+    flags, _ = run_rules([{"id": "PK02", "severity": "High"}], Ctx([], {}, intake))
+    assert len(flags) == 1 and "marked this as pertaining" in flags[0].message
+
+
+def test_mapping_tract_described_only_as_portion():
+    from types import SimpleNamespace
+    from titlepilot.mapping import mapping_items
+    big = _conv("V1445P892", 13807, "13,807 acres described by metes and bounds in Exhibit I", date="1992-12-28")
+    chain = {"conveyances": [big], "instruments": [big], "vesting_instrument": "V1445P892", "subject_acres": 253.27}
+    intake = SimpleNamespace(subject_acres=253.27, legal_description=(
+        "253.27 acres, more or less, out of the Robert Burrell Survey, Abstract 138, being a portion of the land "
+        "described in Gift Deed recorded in Book 1391, Page 354"))
+    items = mapping_items(chain, intake)
+    assert len(items) == 1 and "portion of the 13807 ac" in items[0]["reasons"][0]

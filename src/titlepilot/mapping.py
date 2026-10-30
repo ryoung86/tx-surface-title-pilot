@@ -73,9 +73,25 @@ def mapping_items(chain: dict, intake) -> list[dict]:
         if a:
             prev_acres = a
 
+    # Metes and bounds on a deed that defines this tract or part of it. A deed of a much larger parent
+    # tract (a whole ranch described by metes and bounds) isn't something to map for this tract, and
+    # easements are covered by their own rules.
     for i in chain.get("instruments", []):
-        if is_metes_and_bounds(i.get("legal")):
-            add(i, "Metes and bounds description")
+        if i.get("category") not in ("conveyance", "pore space") or not is_metes_and_bounds(i.get("legal")):
+            continue
+        a = i.get("acreage")
+        if subject and a and a > subject * 2:
+            continue
+        add(i, "Metes and bounds description")
+
+    # The tract is only described as a portion of a larger vesting tract: its own boundary has to be drawn.
+    legal = getattr(intake, "legal_description", None) or ""
+    vest = next((c for c in conveyances if c["instrument_id"] == chain.get("vesting_instrument")), None)
+    if (subject and vest and vest.get("acreage") and vest["acreage"] > subject / PARTIAL_AREA
+            and re.search(r"\b(?:a\s+)?(?:portion|part)\s+of\b|\bout\s+of\s+(?:the|that|a)\b", legal, re.I)
+            and not is_metes_and_bounds(legal)):
+        add(vest, f"Tract ({subject:g} ac) is described only as a portion of the {vest['acreage']:g} ac vesting tract, "
+                  "with no metes and bounds of its own: map the tract boundary")
 
     # Land excepted in the tract's own legal description.
     by_ref = {k: i for i in chain.get("instruments", []) for k in (i.get("ref_keys") or ())}

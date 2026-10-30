@@ -73,6 +73,7 @@ class Intake:
     source: Path | None = None
     mode: str = "intake form"
     runsheet_path: Path | None = None          # first runsheet (shown in the summary)
+    file_checks: list = field(default_factory=list)   # duplicate uploads, file names that don't match
     runsheet_paths: list = field(default_factory=list)
     runsheet_entries: list = field(default_factory=list)
     subject_acres: float | None = None
@@ -83,7 +84,12 @@ RUNSHEET_EXTS = DOC_EXTS | {".xlsx", ".csv"}
 
 
 def is_runsheet(p: Path) -> bool:
-    return p.suffix.lower() in RUNSHEET_EXTS and any(w in p.stem.lower() for w in RUNSHEET_WORDS)
+    """A runsheet has "runsheet" or "index" in its file name, or sits in a folder named that way
+    (e.g. INFORMATIVE FOLDER/NAME RUNSHEETS/LAPIN JACK 1977-1980.pdf)."""
+    if p.suffix.lower() not in RUNSHEET_EXTS:
+        return False
+    names = [p.stem] + [q.name for q in list(p.parents)[:2]]
+    return any(w in n.lower() for n in names for w in RUNSHEET_WORDS)
 
 
 def _walk(folder):

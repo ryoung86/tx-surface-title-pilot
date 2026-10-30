@@ -49,6 +49,29 @@ def _same(a: str, b: str, cutoff=88) -> bool:
     return token_sort_ratio(a.lower(), b.lower()) >= cutoff
 
 
+_SUFFIX = {"jr", "sr", "ii", "iii", "iv", "co", "corp", "corporation", "inc", "ltd", "llc", "lp", "company", "the",
+           "trustee", "tr", "et", "al", "ux", "vir", "indv", "individually"}
+
+
+def _name_words(n: str) -> set:
+    return {w for w in re.findall(r"[a-z0-9]+", str(n).lower()) if w not in _SUFFIX}
+
+
+def same_person(a: str, b: str, cutoff=85) -> bool:
+    """Names match if one's words (ignoring punctuation and Jr./Co./Ltd.-type suffixes) are all in the
+    other's, e.g. 'Clarence Mayer, Jr.' and 'MAYER CLARENCE', 'Jon Totz' and 'TOTZ JOHN (JON)'."""
+    wa, wb = _name_words(a), _name_words(b)
+    small = min(wa, wb, key=len)
+    if len(small) >= 2 and (wa <= wb or wb <= wa):
+        return True
+    return _same(a, b, cutoff)
+
+
+def _short_names(names: str) -> str:
+    parts = [n.strip() for n in str(names or "").split(",") if n.strip()]
+    return parts[0] + (f" (and {len(parts) - 1} name variants)" if len(parts) > 1 else "") if parts else "an owner"
+
+
 def _released(ctx):
     return {r for i in ctx.instruments if i["category"] == "release" for r in i["refers_to"]}
 
@@ -122,7 +145,7 @@ def owner_not_name_searched(ctx, params):
                          "were searched by name for: " + ", ".join(ctx.chain["owners"]))
         return
     for o in ctx.chain["owners"]:
-        if not any(_same(o, s, 85) for s in searched):
+        if not any(same_person(o, s) for s in searched):
             yield None, f"Owner '{o}' in the chain was not listed as name-searched on the intake form"
 
 
@@ -162,22 +185,36 @@ def runsheet_entry_not_uploaded(ctx, params):
     one by one for review; the rest are summarized in one line."""
     have = set().union(*(i["ref_keys"] for i in ctx.instruments)) if ctx.instruments else set()
     abstracts = tract_abstracts(ctx)
-    other_by_names = {}
-    for e in getattr(ctx.intake, "runsheet_entries", None) or []:
+    other_by_names, agent_cleared, seen = {}, 0, set()
+    entries = getattr(ctx.intake, "runsheet_entries", None) or []
+    # Where the same instrument is on several runsheets, the entry the agent marked wins.
+    entries = sorted(entries, key=lambda e: not (e.get("agent_note") or "").strip())
+    for e in entries:
         key = norm_ref(e.get("recording_ref"))
-        if not key or key in have:
+        if not key or key in have or key in seen:      # the same instrument often shows on several runsheets
             continue
+        seen.add(key)
         what = f"{e.get('recording_ref')} ({e.get('instrument_type') or 'type not shown'})"
-        if e.get("_kind") != "name":
+        note = (e.get("agent_note") or "").lower()
+        if "not included" in note or ("pertains" in note and "not pertain" not in note):
+            yield None, (f"The agent marked this as pertaining to the tract but it is not in the package: {what}, "
+                         f"{e.get('grantor') or '?'} (from {e.get('_file') or 'a runsheet'}). Pull it")
+        elif any(k in note for k in ("not pertain", "not subject", "does not pertain", "n/a")):
+            agent_cleared += 1
+        elif e.get("_kind") != "name":
             yield None, f"On the agent's runsheet but not uploaded: {what}"
         elif abstracts and on_abstract(e.get("legal"), abstracts):
             yield None, (f"On this tract's abstract (A-{'/'.join(sorted(abstracts))}) but not in the package: {what}, "
                          f"{e.get('grantor') or '?'}. Pull it and confirm whether it affects this tract")
         elif name_search_hit(e.get("instrument_type")):
-            yield None, (f"Name search hit for {e.get('_names') or 'an owner'} not in the package: {what}, "
+            yield None, (f"Name search hit for {_short_names(e.get('_names'))} not in the package: {what}, "
                          f"{e.get('grantor') or '?'} to {e.get('grantee') or '?'}. Confirm whether it affects this tract")
         else:
-            other_by_names[e.get("_names") or "an owner"] = other_by_names.get(e.get("_names") or "an owner", 0) + 1
+            k = _short_names(e.get("_names"))
+            other_by_names[k] = other_by_names.get(k, 0) + 1
+    if agent_cleared:
+        yield None, (f"{agent_cleared} runsheet entries not in the package were marked by the agent as not "
+                     "pertaining to this tract (not flagged individually)")
     for names, count in other_by_names.items():
         yield None, (f"{count} other instruments on the name runsheet for {names} are not in the package "
                      "(usually other land). Spot-check that none covers this tract")
@@ -193,6 +230,12 @@ def document_not_on_runsheet(ctx, params):
     for i in ctx.instruments:
         if not i["ref_keys"] & keys:
             yield i["instrument_id"], "Uploaded but not on the agent's runsheet"
+
+
+@rule("PK04")
+def file_problems(ctx, params):
+    for instrument_id, message in getattr(ctx.intake, "file_checks", None) or []:
+        yield instrument_id, message
 
 
 @rule("OW01")

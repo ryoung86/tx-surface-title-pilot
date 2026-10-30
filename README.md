@@ -95,7 +95,7 @@ tests/           end-to-end tests on the synthetic tract
 
 ## Status of the rules
 
-Implemented: R01, R06, R12, R13, TS03, TS06, TS07, plus code-only rules PK01 (owner with no record of a name search), PK02/PK03 (runsheet vs uploads) OW01 (current owner needs review) and MP01 (needs mapping, below).
+Implemented: R01, R06, R12, R13, TS03, TS06, TS07, plus code-only rules PK01 (owner with no record of a name search), PK02/PK03 (runsheet vs uploads) PK04 (same instrument uploaded twice, or a file name whose recording reference doesn't match the document), OW01 (current owner needs review), MP01 (needs mapping, below) and PS01 (pore space, below).
 
 In config but no check yet (reported as "skipped" on every run): R07, R09, R10, R11, T01, T02, TS01, TS02, TS04, TS05. Add each as a `@rule("ID")` function in `rules.py` once the landmen settle the wording. Some need data the pilot will bring: TS02 needs the project route file, and T01 and T02 need decisions on how homestead and heirship facts are recorded.
 
@@ -172,3 +172,16 @@ Claude copies any pore space language into the `pore_space` field: pore space, s
 - **Any other mention**: flagged for a landman to read.
 
 Every instrument with pore space language gets a PS01 flag (High), and so does a severance. The report's Pore Space Ownership section shows the pore space owner and vesting instrument, and the AI Review sheet gives the basis.
+
+
+## Agent marks on name runsheets
+
+Many name runsheets have a column showing what the agent decided about each entry (for example C = copied, X = not pertaining, * = pertains but not included, or notes like "not subject property"). Claude reads that mark into `agent_note`, and PK02 uses it:
+
+- **Pertains, not included**: a High flag, "The agent marked this as pertaining to the tract but it is not in the package". Pull it.
+- **Not pertaining / not subject property**: not flagged one by one; counted in a single line instead.
+- An instrument that appears on several runsheets is only flagged once.
+
+## Ordering and vesting
+
+Instruments are put in filing order. One with no filing date read goes by the date it was signed; one with neither date goes last and is never taken as the vesting deed, so a late-recorded probate or affidavit can't be mistaken for the newest conveyance. Correction deeds ("Correction Deed", "Corrective ... Deed") count as conveyances.

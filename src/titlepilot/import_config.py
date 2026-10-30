@@ -42,6 +42,13 @@ CODE_RULES = [
         "source": "code",
     },
     {
+        "id": "PK04",
+        "name": "Same instrument uploaded twice, or file name's recording reference doesn't match the document",
+        "severity": "Medium",
+        "enabled": True,
+        "source": "code",
+    },
+    {
         "id": "PS01",
         "name": "Pore space language (reservation, separate conveyance, storage/sequestration lease or mention)",
         "severity": "High",
