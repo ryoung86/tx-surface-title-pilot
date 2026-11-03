@@ -25,6 +25,7 @@ Newest at the bottom. Commit IDs point to the full change on GitHub. **Add an en
 | 18 | 10/30 | 0.9.0 | Rule to double-check numbers (the 1%/7% mistake) | NUM01: grantee shares must total 100% or the interest conveyed; number words must match digits; per-grantee share field; acreage/interest added to low-confidence check | Catches misread digits without a second reading; found 1.968% read as 1.948% in 809/87 | 1e5425f, f703db4, 345c2a4 |
 | 19 | 10/30 | 0.9.0 | Cache readings so reruns don't re-pay the API | **Deferred.** Logged in docs/BEFORE_GO_LIVE.md with flag-noise tuning | Decide before go-live | a537857 |
 | 20 | 10/30 | 0.9.0 | Keep an audit trail of every change | This file; kept up to date with each change | Review at project end and for future changes | 2f23fb8 |
+| 21 | 11/03 | 0.9.1 | Send an updated Fields and Rules workbook with the new additions | Rules sheet: added PK01–PK04, OW01, MP01 with reviewer actions (all 25 rules now listed); severity list gets Mapping; 12 new instrument types (correction deed, solar/wind/ground/CO2 leases, pore space deed, timber, accommodation, etc.); How to use updated (intake form and document list optional, which rules are built into code) | Workbook lagged behind the code; landmen review rules from this sheet | (this commit) |
 
 ## Decisions and open items (no code change)
 
