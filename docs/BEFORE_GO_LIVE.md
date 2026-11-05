@@ -37,3 +37,14 @@ same day out of order. Tune these so the review workbook leads with what needs a
 
 The broker's 30 new checks will add flags on every tract (DR08 marital status and EA03 width are the likeliest to be
 noisy). Check the counts on the next API run of 0180 and tune thresholds or severities before go-live.
+
+## Web app for title agents (idea, not started)
+
+**Status:** discussed 2026-11-05; not started, details still being worked out.
+
+Outline: website on Vercel (upload, run status, review, approval, admin); Supabase for login (company Microsoft
+accounts, roles agent / landman / admin), Postgres (tracts, runs, flags, approvals, costs) and file storage; the
+Python program as a worker on AWS ECS Fargate, holding the API key; a jobs table as the queue for the pilot, Amazon
+SQS with autoscaling at volume (10-500 tracts a month, 2-20 agents). Optional bridge from the local SFTP server that
+pushes finished tracts (marked READY) to storage, outbound only. Batch API and the reading cache to hold API cost
+down. To check: Supabase plan and current website login, who manages AWS.
