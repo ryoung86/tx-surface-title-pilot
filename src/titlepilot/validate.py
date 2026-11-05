@@ -181,5 +181,22 @@ def normalize(record: dict, doc) -> dict:
         "term": as_text(val(record, "term")),
         "county": as_text(val(record, "county")),
         "found_by": doc.found_by,
+        "operative": as_text(val(record, "operative_language")),
+        "type_conf": conf(record, "instrument_type"),
+        "values": flat_values(record),
         "record": record,
     }
+
+
+def flat_values(record: dict) -> dict:
+    """Every field's value as text, for the All Fields sheet and the rules (parties shown by name)."""
+    out = {}
+    for name, f in record.items():
+        if name.startswith("_") or not isinstance(f, dict):
+            continue
+        v = f.get("value")
+        if isinstance(v, list) and v and isinstance(v[0], dict):
+            v = "; ".join(" ".join(str(p.get(k) or "") for k in ("name", "capacity", "marital_status")).strip()
+                          for p in v if isinstance(p, dict))
+        out[name] = as_text(v) if v not in ("", []) else None
+    return out

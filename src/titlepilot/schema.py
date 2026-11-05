@@ -57,6 +57,11 @@ PORE_SPACE_DEFINITION = (
 
 TERM_DEFINITION = ("The term of a lease, easement or timber deed as written: primary term, renewals, extensions and options (e.g. 'thirty (30) years ... two renewal terms of five (5) years each'). Empty if none stated")
 
+CLAUSE_CONFLICTS_DEFINITION = (
+    "Any conflict between the granting clause, the habendum and the reservation or exception clauses (e.g. "
+    "'grants all of the land' but later reserves an undivided fraction of the surface, or the habendum names a "
+    "different estate), described in one or two sentences with the words quoted. Empty if the clauses agree")
+
 # Fields the code depends on, added to every schema whether or not the workbook lists them.
 SYSTEM_FIELDS = [
     {"name": "document_kind", "type": "text",
@@ -65,7 +70,33 @@ SYSTEM_FIELDS = [
                     "or 'other supporting document'"},
     {"name": "pore_space", "type": "text", "description": PORE_SPACE_DEFINITION},
     {"name": "term", "type": "text", "description": TERM_DEFINITION},
+    {"name": "clause_conflicts", "type": "text", "group": "core", "description": CLAUSE_CONFLICTS_DEFINITION},
 ]
+
+# Groups asked of every document; the others only of the documents they fit (GROUP_SCOPE), so a deed doesn't pay
+# for forty empty lien and easement fields. When the type is unclear the model fills every group that might apply.
+ALWAYS = {"", "core", "surface"}
+GROUP_SCOPE = {
+    "liens": "liens: deeds of trust, mortgages, vendor's liens, mechanic's and tax liens, judgments, UCC filings, "
+             "and releases or partial releases of any of them",
+    "easements & leases": "easements and rights-of-way (pipeline, road, utility, access), and surface, solar, wind, "
+                          "ground, grazing, hunting, agricultural, CO2 storage and oil and gas leases, surface use, "
+                          "damage and accommodation agreements",
+}
+# Worked out by the program, never asked of the model.
+NOT_ASKED_GROUPS = {"tract output", "taxes"}
+CALCULATED = {"estimated_remaining_term", "estimated_remaining_balance", "release_status", "release_reference",
+              "remaining_acreage"}
+
+
+def asked_fields(fields: list[dict]) -> list[dict]:
+    """Fields sent to the model: all fields less the calculated ones and the groups the program fills itself."""
+    return [f for f in all_fields(fields)
+            if f["name"] not in CALCULATED and (f.get("group") or "").lower() not in NOT_ASKED_GROUPS]
+
+
+def is_scoped(field: dict) -> bool:
+    return (field.get("group") or "").lower() not in ALWAYS
 RECORDED = "recorded instrument"
 
 
@@ -75,10 +106,30 @@ def all_fields(fields: list[dict]) -> list[dict]:
 
 
 def build_schema(fields: list[dict]) -> dict:
-    fields = all_fields(fields)
+    """Core and surface fields are required; the scoped groups (liens, easements & leases) may be left out
+    when they don't fit the document."""
+    fields = asked_fields(fields)
     return {
         "type": "object",
         "properties": {f["name"]: field_schema(f) for f in fields},
-        "required": [f["name"] for f in fields],
+        "required": [f["name"] for f in fields if not is_scoped(f)],
         "additionalProperties": False,
     }
+
+
+def field_definitions(fields: list[dict]) -> str:
+    """The field list for the prompt, with each scoped group under its own heading."""
+    fields = asked_fields(fields)
+    lines = [f"- {f['name']} ({f.get('type', 'text')}): {f.get('description', '')}" for f in fields if not is_scoped(f)]
+    groups = []
+    for f in fields:
+        g = (f.get("group") or "").lower()
+        if is_scoped(f) and g not in groups:
+            groups.append(g)
+    for g in groups:
+        scope = GROUP_SCOPE.get(g, g)
+        lines.append(f"\n{g.upper()} fields: fill these only when the instrument is one of these ({scope}), or when "
+                     "you are unsure whether it is. Leave the whole group out otherwise.")
+        lines += [f"- {f['name']} ({f.get('type', 'text')}): {f.get('description', '')}"
+                  for f in fields if (f.get("group") or "").lower() == g]
+    return "\n".join(lines)

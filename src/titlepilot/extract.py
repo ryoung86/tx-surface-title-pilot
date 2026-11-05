@@ -20,7 +20,7 @@ from pathlib import Path
 from .validate import schema_errors
 
 DEFAULT_MODEL = os.environ.get("TITLEPILOT_MODEL", "claude-sonnet-5-5")
-MAX_TOKENS = 16000             # one recorded instrument
+MAX_TOKENS = 32000             # one recorded instrument (verbatim clauses and calls make long replies)
 RUNSHEET_MAX_TOKENS = 32000    # one runsheet page can list many instruments
 RUNSHEET_ROWS_PER_CHUNK = 120  # spreadsheet/CSV runsheets are sent in chunks of this many rows
 
@@ -176,12 +176,16 @@ class Extractor:
             self.client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
             self._retryable = (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError)
 
-    def _call(self, messages, max_tokens=MAX_TOKENS):
-        """One API call, streamed so long replies don't time out. Returns (text, usage, stop_reason)."""
+    def _call(self, messages, max_tokens=MAX_TOKENS, system=None):
+        """One API call, streamed so long replies don't time out. Returns (text, usage, stop_reason).
+        The instructions go in a cached system prompt: they are the same for every document, so after the
+        first document of a run they are billed at the cache-read rate."""
         last_error = None
+        extra = {"system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]} if system else {}
         for attempt in range(3):
             try:
-                with self.client.messages.stream(model=self.model, max_tokens=max_tokens, messages=messages) as stream:
+                with self.client.messages.stream(model=self.model, max_tokens=max_tokens, messages=messages,
+                                                 **extra) as stream:
                     resp = stream.get_final_message()
             except self._retryable as e:
                 last_error = e
@@ -196,8 +200,9 @@ class Extractor:
     def _ask(self, content: list, schema: dict, instructions: str, max_tokens=MAX_TOKENS, salvage=None) -> dict:
         """Send content + instructions, check the JSON against schema, allow one correction round.
         salvage: optional function that recovers a usable result from a cut-off reply."""
-        messages = [{"role": "user", "content": content + [{"type": "text", "text": instructions}]}]
-        text, usage, stop = self._call(messages, max_tokens)
+        messages = [{"role": "user", "content": content + [{"type": "text", "text": "Abstract this document as instructed. "
+                                                                             "Reply with the JSON object only."}]}]
+        text, usage, stop = self._call(messages, max_tokens, system=instructions)
         usages, repaired = [usage], False
         if stop == "max_tokens":
             if salvage is None:
@@ -218,7 +223,7 @@ class Extractor:
                                             + "\n- ".join(errors[:25])
                                             + "\nReturn the complete corrected JSON object only."},
             ]
-            text, usage, stop = self._call(messages, max_tokens)
+            text, usage, stop = self._call(messages, max_tokens, system=instructions)
             usages.append(usage)
             if stop == "max_tokens" and salvage is not None:
                 record = salvage(text)

@@ -121,15 +121,15 @@ fields:
   type: text
   description: Any minerals excepted or reserved from the conveyance, verbatim
   required: false
-- name: term
-  group: surface
-  type: text
-  description: "The term of a lease, easement or timber deed as written: primary term, renewals, extensions and options (e.g. 'thirty (30) years ... two renewal terms of five (5) years each'). Empty if none stated"
-  required: false
 - name: pore_space
   group: surface
   type: text
-  description: "Any language about pore space, subsurface or underground storage space, geologic storage, storage reservoirs or salt caverns, or carbon dioxide (CO2) injection, storage or sequestration rights: grants, reservations, exceptions, leases, easements or options. Verbatim. Empty if none. A plain mineral reservation ('oil, gas and other minerals') is not pore space language: leave it in mineral_exception only"
+  description: 'Any language about pore space, subsurface or underground storage space, geologic storage, storage reservoirs or salt caverns, or carbon dioxide (CO2) injection, storage or sequestration rights: grants, reservations, exceptions, leases, easements or options. Verbatim. Empty if none. A plain mineral reservation (''oil, gas and other minerals'') is not pore space language: leave it in mineral_exception only'
+  required: false
+- name: term
+  group: surface
+  type: text
+  description: 'The term of a lease, easement or timber deed as written: primary term, renewals, extensions and options (e.g. ''thirty (30) years ... two renewal terms of five (5) years each''). Empty if none stated'
   required: false
 - name: homestead_indicators
   group: surface
@@ -160,4 +160,214 @@ fields:
   group: surface
   type: text
   description: Affidavits of use and possession, adverse possession recitals
+  required: false
+- name: assignment_restrictions
+  group: surface
+  type: text
+  description: 'Any limit on assignment or transfer: consent required, notice required, prohibited, or runs with the land, verbatim. Empty if none'
+  required: false
+- name: preferential_rights
+  group: surface
+  type: text
+  description: 'Right of first refusal, option to purchase, preferential right or right of first offer: holder, triggering event, deadline, verbatim. Empty if none'
+  required: false
+- name: access
+  group: surface
+  type: text
+  description: Access or ingress/egress easements granted or reserved, and any recital of road frontage or landlocked status, verbatim
+  required: false
+- name: accommodation_terms
+  group: surface
+  type: text
+  description: 'Surface use, accommodation or damage provisions tied to a mineral lessee or operator: lessee, area or setbacks covered, and limits on surface use, verbatim'
+  required: false
+- name: signatures
+  group: core
+  type: list
+  description: 'Each signature: name as signed, capacity in the signature block, and whether every party in the granting clause signed'
+  required: false
+- name: acknowledgment
+  group: core
+  type: list
+  description: 'Per acknowledgment: name acknowledged, capacity, venue, notary name, seal present, commission expiration, date'
+  required: false
+- name: recording_stamp
+  group: core
+  type: text
+  description: 'Clerk''s stamp as shown: present/missing, volume, page, instrument no., file date and time'
+  required: false
+- name: page_completeness
+  group: core
+  type: text
+  description: Page numbering seen (e.g. 'page 2 of 5'), missing pages, exhibits referenced vs. attached
+  required: false
+- name: alterations
+  group: core
+  type: text
+  description: Handwritten changes, strikeouts, interlineations or blanks, where they are, and whether initialed
+  required: false
+- name: granting_clause_text
+  group: core
+  type: text
+  description: Granting clause verbatim, including names of grantors as recited
+  required: false
+- name: description_references
+  group: core
+  type: list
+  description: Surveys, plats or exhibits the legal description relies on, and whether each is recorded or attached
+  required: false
+- name: metes_and_bounds_calls
+  group: core
+  type: list
+  description: 'Each call parsed: bearing, distance, monument; plus point of beginning'
+  required: false
+- name: habendum_and_reservations_text
+  group: core
+  type: text
+  description: Habendum, reservation and exception clauses verbatim, kept separate from mineral_exception
+  required: false
+- name: reserved_fractions
+  group: core
+  type: list
+  description: Each fraction reserved or excepted, as written, with the base it applies to ('of the minerals', 'of royalty')
+  required: false
+- name: recited_liens
+  group: core
+  type: list
+  description: 'Liens recited in the instrument (vendor''s lien, deed of trust, assumed debt, note of even date): holder, amount, date'
+  required: false
+- name: released_lien
+  group: core
+  type: text
+  description: 'For releases: lien holder, amount, date and recording reference of the lien being released'
+  required: false
+- name: legibility
+  group: core
+  type: text
+  description: Pages or areas that are illegible, cut off, faint or unreadable handwriting, by page number
+  required: false
+- name: operative_language
+  group: core
+  type: text
+  description: The operative words of conveyance or grant (e.g. 'grant, sell and convey', 'grant an easement'), verbatim
+  required: false
+- name: lien_type
+  group: liens
+  type: text
+  description: Mortgage, deed of trust, credit/home equity deed of trust, vendor's lien, mechanic's lien, judgment, tax lien, UCC or similar, as written
+  required: false
+- name: lien_holder
+  group: liens
+  type: text
+  description: Lender or lienholder (beneficiary), trustee, and any successor or assignee named
+  required: false
+- name: lien_amount
+  group: liens
+  type: number
+  description: Original principal or secured amount; source_text as written (e.g. ONE HUNDRED THOUSAND AND NO/100 DOLLARS ($100,000.00))
+  required: false
+- name: interest_rate
+  group: liens
+  type: text
+  description: Stated interest rate, fixed or variable, as written. Empty if not stated
+  required: false
+- name: payment_terms
+  group: liens
+  type: text
+  description: 'Payment schedule as written: installment amount, frequency, first payment date'
+  required: false
+- name: lien_term
+  group: liens
+  type: text
+  description: Term of the note or lien as written (e.g. 30 years, 360 monthly installments)
+  required: false
+- name: maturity_date
+  group: liens
+  type: date
+  description: Final maturity date of the note, as stated or computed from the term; YYYY-MM-DD
+  required: false
+- name: estimated_remaining_term
+  group: liens
+  type: text
+  description: 'Computed: time left to maturity from today, assuming payments made as scheduled. Zero if matured'
+  required: false
+- name: estimated_remaining_balance
+  group: liens
+  type: number
+  description: 'Computed: estimated principal left today from amount, rate and term on a standard amortization, assuming payments made as scheduled. Flag as an estimate; empty if rate or term missing'
+  required: false
+- name: release_status
+  group: liens
+  type: text
+  description: Released, partially released, or no release found; set by matching release instruments in the package
+  required: false
+- name: release_reference
+  group: liens
+  type: text
+  description: Recording reference and filing date of the matching release or partial release, and land covered if partial
+  required: false
+- name: easement_exclusive
+  group: easements & leases
+  type: text
+  description: 'Required, one value only: Exclusive, Non-exclusive, or Silent. Never blank. Use Silent when the instrument says neither. Put the exclusivity language verbatim in source_text (complements exclusivity)'
+  required: true
+- name: easement_width
+  group: easements & leases
+  type: text
+  description: Width of the easement or right-of-way, permanent and temporary/construction width separately, as written (e.g. 50 ft permanent, 25 ft temporary workspace); note if no width stated
+  required: false
+- name: term_years
+  group: easements & leases
+  type: number
+  description: Term in years as a number (primary term only); empty if perpetual or not stated. Full term language stays in term
+  required: false
+- name: expiration_date
+  group: easements & leases
+  type: date
+  description: Stated or computed expiration date, YYYY-MM-DD; empty if perpetual. Note renewal or extension rights in term
+  required: false
+- name: perpetual
+  group: easements & leases
+  type: text
+  description: Yes if the grant says perpetual, forever, or 'so long as used'; No if a fixed term; Unknown if silent
+  required: false
+- name: crossing_restrictions
+  group: easements & leases
+  type: text
+  description: 'Any language limiting crossings or encroachments on the easement by others: no crossing without consent, minimum depth or separation, no other pipelines within X feet, no structures or improvements, setbacks. Verbatim'
+  required: false
+- name: crossing_control
+  group: easements & leases
+  type: text
+  description: 'Any language letting the easement holder control or dictate a crossing: prior written consent or approval, crossing agreement required, holder sets specifications, inspection, fees, indemnity or insurance requirements, right to relocate. Verbatim'
+  required: false
+- name: additional_lines_rights
+  group: easements & leases
+  type: text
+  description: Holder's right to lay additional lines, or a right of first refusal/exclusivity on future lines within the easement or tract, verbatim
+  required: false
+- name: abandonment_period_months
+  group: easements & leases
+  type: number
+  description: Nonuse or abandonment period converted to months (e.g. 2 years = 24; 365 days = 12). Empty if no abandonment provision. Verbatim language stays in expiration_terms
+  required: false
+- name: abandonment_trigger
+  group: easements & leases
+  type: text
+  description: 'What starts the clock as written: nonuse, cessation of operations, removal of facilities, failure to construct within X months, etc.'
+  required: false
+- name: abandonment_effect
+  group: easements & leases
+  type: text
+  description: 'What happens as written: automatic termination/reversion, owner may terminate on notice, release required, removal of facilities'
+  required: false
+- name: encumbrance_type
+  group: core
+  type: text
+  description: 'One category per encumbrance: Easement / ROW, Pipeline easement, Exclusive ROW, Lien (deed of trust, vendor''s, mechanic''s, judgment, tax), Surface lease (agricultural, grazing, hunting, gravel, coal/lignite, timber, calcite, solar, wind, ground), Mineral reservation/lease, Pore space / CO2 storage, Restriction/covenant, Lis pendens, Right of first refusal/option, Other'
+  required: false
+- name: grantee_mailing_address
+  group: core
+  type: text
+  description: Grantee mailing address as stated in the deed (often after the grantee name or in a "mail tax statements to" / "after recording return to" block), verbatim, per grantee
   required: false

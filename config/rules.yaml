@@ -5,10 +5,6 @@ rules:
   name: Grantor does not appear as a grantee or heir earlier in the tract's chain
   severity: High
   enabled: true
-- id: R06
-  name: Deed of trust, vendor's lien or other lien recorded with no matching release
-  severity: Medium
-  enabled: true
 - id: R07
   name: Owners' surface interests in a tract add up to more or less than 100%
   severity: High
@@ -43,10 +39,6 @@ rules:
   severity: High if recorded under 5 years, else Medium
   enabled: true
   legal_reference: Texas Estates Code §203.001 (confirm with counsel)
-- id: TS01
-  name: Easement or right-of-way has no locatable description (blanket easement)
-  severity: Medium
-  enabled: true
 - id: TS02
   name: 'Easement or right-of-way crosses the project area: confirm against the survey'
   severity: Medium
@@ -71,44 +63,323 @@ rules:
   name: 'Mineral exception or reservation found: estates are severed, route the tract to a mineral run'
   severity: Review
   enabled: true
+- id: PS01
+  name: 'Pore space language found: reservation or exception, separate conveyance of pore space, storage or sequestration lease/easement, or other mention. Pore space owner shown as the surface owner unless severed'
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Read the language; confirm the pore space owner and trace any reserved pore space forward
+  legal_reference: 'Myers-Woodward, LLC v. Underground Services Markham, LLC (Tex. 2025): surface owner owns pore space absent agreement; pore space is not a mineral (confirm with counsel)'
+- id: NUM01
+  name: 'Possible misread number: grantee shares in an instrument don''t total 100% of the interest conveyed, or a number written in words and digits disagrees (e.g. ''seven (1%)'')'
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Look at the image of the page and correct the number
 - id: PK01
   name: Owner in the chain has no record of a name search (intake form or runsheet)
   severity: High
   enabled: true
-  source: code
+  applies_to:
+  - any
+  reviewer_action: Ask the agent for the name search.
 - id: PK02
-  name: Instrument on the agent's runsheet was not uploaded
+  name: Instrument on the agent's runsheet (or marked pertaining, or in the abstract) was not uploaded
   severity: High
   enabled: true
-  source: code
-- id: OW01
-  name: Current owner needs review (out-sale, undivided interest, or tract acreage unknown)
-  severity: High
-  enabled: true
-  source: code
+  applies_to:
+  - any
+  reviewer_action: Pull it, or confirm it covers other land.
 - id: PK03
   name: Uploaded document is not on the agent's runsheet
   severity: Low
   enabled: true
-  source: code
-- id: NUM01
-  name: "Possible misread number: grantee shares don't total 100%, or a number's words and digits disagree"
-  severity: High
-  enabled: true
-  source: code
+  applies_to:
+  - any
+  reviewer_action: Confirm it belongs to the tract.
 - id: PK04
   name: Same instrument uploaded twice, or file name's recording reference doesn't match the document
   severity: Medium
   enabled: true
-  source: code
-- id: PS01
-  name: Pore space language (reservation, separate conveyance, storage/sequestration lease or mention)
+  applies_to:
+  - any
+  reviewer_action: Ask the agent for the right file.
+- id: OW01
+  name: Current owner needs review (out-sale, undivided interest, or tract acreage unknown)
   severity: High
   enabled: true
-  source: code
-  legal_reference: 'Myers-Woodward, LLC v. Underground Services Markham, LLC (Tex. 2025): surface owner owns pore space absent agreement (confirm with counsel)'
+  applies_to:
+  - conveyances
+  reviewer_action: Confirm the vesting deed and any exceptions.
 - id: MP01
   name: Out-sale, exception or metes and bounds description needs to be mapped
   severity: Mapping
   enabled: true
-  source: code
+  applies_to:
+  - conveyances
+  - easements
+  - out-sales
+  reviewer_action: Mapping team draws it; mark it mapped in the queue (mapping_queue.csv). Email/Teams notice is sent if set up.
+- id: TS08
+  name: A surface lease or easement in the chain (solar, wind, ground, grazing or pipeline) grants exclusive surface rights over the project area
+  severity: High
+  enabled: true
+  applies_to:
+  - surface lease
+  - solar lease
+  - wind lease
+  - ground lease
+  - grazing lease
+  - easement / row
+  - pipeline easement
+  reviewer_action: Read the exclusivity and term language; confirm whether it conflicts with the project
+- id: TS10
+  name: Easement or lease has an assignment restriction or consent requirement
+  severity: Medium
+  enabled: true
+  applies_to:
+  - easements and leases
+  reviewer_action: Read the clause; route to consent-to-assign review
+- id: TS11
+  name: Right of first refusal, purchase option or preferential right in the chain
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Confirm whether it was exercised, waived or expired
+- id: TS12
+  name: No access easement shown for a tract with no frontage on a public road
+  severity: Medium
+  enabled: true
+  applies_to:
+  - conveyances
+  reviewer_action: Check access to the tract
+- id: TS13
+  name: Surface use accommodation clause or surface damage agreement ties the surface to a mineral lessee
+  severity: Medium
+  enabled: true
+  applies_to:
+  - oil and gas lease
+  - surface use or damage agreement
+  - accommodation agreement
+  reviewer_action: Read its scope for conflicts with the project
+- id: DR01
+  name: Instrument is unsigned, or a party named in the granting clause did not sign
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Check the image; get a ratification or corrected instrument
+- id: DR02
+  name: 'Acknowledgment missing, incomplete or defective: no notary seal, expired commission, blank venue, or acknowledgment name does not match the signer'
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Check the image; look for a later correction or ratification
+  legal_reference: Tex. Prop. Code §12.001 (confirm with counsel)
+- id: DR04
+  name: 'Pages missing or out of order: ''page 2 of 5'' gaps, cut-off exhibits, or ''see Exhibit A'' with no exhibit attached'
+  severity: Medium
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Pull the complete instrument from the clerk
+- id: DR05
+  name: Handwritten changes, strikeouts, interlineations or blanks in material terms (parties, land, interest, consideration) with no initials
+  severity: Medium
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Read the changes; confirm they were made before execution
+- id: DR06
+  name: Grantor's name in the granting clause differs from the signature block or acknowledgment
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Confirm identity; check aliases (R09)
+- id: DR07
+  name: Recited capacity (trustee, executor, attorney-in-fact, officer) does not match how it was signed or acknowledged
+  severity: Medium
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Confirm capacity and authority (R11)
+- id: DR08
+  name: Marital status not stated for an individual grantor
+  severity: Medium
+  enabled: true
+  applies_to:
+  - conveyances
+  - liens
+  reviewer_action: Check for spouse and homestead (T01)
+- id: DR09
+  name: 'Legal description cannot be located on its own: ''my land'', ''the home place'', or relies on an unrecorded survey or plat'
+  severity: High
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Find the referenced survey or plat; flag possible void description
+  legal_reference: Statute of frauds, Tex. Bus. & Com. Code §26.01 (confirm with counsel)
+- id: DR10
+  name: Metes and bounds do not close, or calls conflict with stated acreage or survey/abstract
+  severity: Medium
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Send to mapping (MP01) to plot and check closure
+- id: DR11
+  name: Correction, ratification or partial release whose description differs from the instrument it references
+  severity: Medium
+  enabled: true
+  applies_to:
+  - correction deed
+  - release
+  - ratifications
+  reviewer_action: Compare to the referenced instrument (R10, R16)
+- id: DR12
+  name: Granting clause conflicts with habendum or reservation clause (e.g. 'all of the land' followed by an undivided fraction reserved)
+  severity: High
+  enabled: true
+  applies_to:
+  - conveyances
+  reviewer_action: Read the whole instrument; route to counsel
+- id: DR13
+  name: 'Ambiguous reservation or exception: ''less and except prior reservations'', ''subject to'', or fixed vs. floating fraction'
+  severity: High
+  enabled: true
+  applies_to:
+  - conveyances
+  reviewer_action: Route to counsel for interpretation
+- id: DR14
+  name: 'Duplicate reservation (Duhig problem): grantor reserves an interest it no longer fully owns'
+  severity: Medium
+  enabled: true
+  applies_to:
+  - conveyances
+  reviewer_action: Trace the grantor's interest; route to counsel
+  legal_reference: Duhig v. Peavy-Moore Lumber Co. (Tex. 1940) (confirm with counsel)
+- id: DR15
+  name: Instrument recites a vendor's lien or deed of trust, but no lien instrument is in the package
+  severity: Medium
+  enabled: true
+  applies_to:
+  - conveyances
+  reviewer_action: Pull the lien and search for a release (R06)
+- id: DR16
+  name: Release names a different lien holder, amount or date than the lien it claims to release
+  severity: Medium
+  enabled: true
+  applies_to:
+  - release
+  reviewer_action: Match the release to the correct lien; check successor names
+- id: DR17
+  name: Consideration recites a 'note of even date' or assumed debt
+  severity: Low
+  enabled: true
+  applies_to:
+  - conveyances
+  reviewer_action: Search for the implied lien and its release
+- id: DR19
+  name: Extracted instrument_type does not match the operative language (e.g. titled 'Easement' but conveys fee)
+  severity: Review
+  enabled: true
+  applies_to:
+  - any
+  reviewer_action: Read the operative clause; correct instrument_type
+- id: LN01
+  name: Lien with no release found and maturity date not yet passed (estimated balance still outstanding)
+  severity: High
+  enabled: true
+  applies_to:
+  - deed of trust
+  - vendor's lien
+  - lien
+  - mortgages
+  reviewer_action: Report lien amount, maturity and estimated balance; request payoff or release
+- id: LN02
+  name: Lien with no release found and maturity date passed
+  severity: Medium
+  enabled: true
+  applies_to:
+  - deed of trust
+  - vendor's lien
+  - lien
+  reviewer_action: Search for release under successor names; check limitations on enforcement
+  legal_reference: Tex. Civ. Prac. & Rem. Code §16.035 (4-year limit after maturity) (confirm with counsel)
+- id: LN03
+  name: Lien amount, rate or term missing or unreadable, so balance cannot be estimated
+  severity: Review
+  enabled: true
+  applies_to:
+  - deed of trust
+  - vendor's lien
+  - lien
+  reviewer_action: Check the image and the note, if recorded
+- id: EA01
+  name: Easement or lease restricts crossing or encroachment (consent, depth/separation, no other pipelines, no improvements)
+  severity: High
+  enabled: true
+  applies_to:
+  - easement / row
+  - pipeline easement
+  - surface lease
+  - solar lease
+  - wind lease
+  - ground lease
+  - surface use or damage agreement
+  reviewer_action: Read crossing_restrictions; confirm whether the new pipeline route can comply
+- id: EA02
+  name: Easement holder can control or dictate a crossing (consent, crossing agreement, specs, fees, indemnity, relocation)
+  severity: High
+  enabled: true
+  applies_to:
+  - easement / row
+  - pipeline easement
+  - surface lease
+  - solar lease
+  - wind lease
+  - ground lease
+  - surface use or damage agreement
+  reviewer_action: Plan for a crossing agreement with the holder; note timing and cost terms
+- id: EA03
+  name: Easement or lease has no stated width
+  severity: Medium
+  enabled: true
+  applies_to:
+  - easement / row
+  - pipeline easement
+  - surface lease
+  - solar lease
+  - wind lease
+  - ground lease
+  - surface use or damage agreement
+  reviewer_action: Check the survey or as-built; treat as possibly blanket (TS01)
+- id: EA04
+  name: Easement or lease term has expired or expires within 5 years
+  severity: Medium
+  enabled: true
+  applies_to:
+  - easement / row
+  - pipeline easement
+  - surface lease
+  - solar lease
+  - wind lease
+  - ground lease
+  - surface use or damage agreement
+  reviewer_action: Confirm lapse, renewal or extension rights (TS09)
+- id: EA05
+  name: Third-party easement or lease has an abandonment or nonuse provision
+  severity: Medium
+  enabled: true
+  applies_to:
+  - easement / row
+  - pipeline easement
+  - surface lease
+  - solar lease
+  - wind lease
+  - ground lease
+  reviewer_action: Check whether the abandonment period has run (facilities removed, no use); if so, seek a release or recorded termination

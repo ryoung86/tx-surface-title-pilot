@@ -75,12 +75,18 @@ def test_rerun_links_to_previous_run(sample, tmp_path):
 
 
 def test_schema_fits_structured_output_rules():
-    """Strict shape: additionalProperties false, all properties required, no nullable types."""
-    schema = load_config(CONFIG).schema
+    """Strict shape: additionalProperties false, all properties required, no nullable types. The one exception
+    is the top level, where the scoped groups (liens, easements & leases) may be left out."""
+    from titlepilot.schema import asked_fields, is_scoped
+    cfg = load_config(CONFIG)
+    schema = cfg.schema
+    scoped = {f["name"] for f in asked_fields(cfg.fields) if is_scoped(f)}
+    assert scoped, "expected lien and easement groups in the config"
+    assert set(schema["required"]) == set(schema["properties"]) - scoped
 
-    def walk(node):
+    def walk(node, top=False):
         if isinstance(node, dict):
-            if node.get("type") == "object":
+            if node.get("type") == "object" and not top:
                 assert node.get("additionalProperties") is False
                 assert set(node.get("required", [])) == set(node.get("properties", {}))
             assert not isinstance(node.get("type"), list), "nullable/union types count toward a small limit"
@@ -89,7 +95,7 @@ def test_schema_fits_structured_output_rules():
         elif isinstance(node, list):
             for v in node:
                 walk(v)
-    walk(schema)
+    walk(schema, top=True)
 
 
 def test_sample_mock_records_match_schema(sample):
@@ -501,7 +507,7 @@ def test_title_report_in_seg_format(sample, tmp_path):
     res = run_tract(sample / TRACT, load_config(CONFIG), db, tmp_path / "out", mock=True, log=lambda *_: None)
     wb = openpyxl.load_workbook(res["report"])
     assert wb.sheetnames == ["Ownership ", "Ownership BT Data", "Encumbrances", "ROWs and Easements", "Flowchart", "Names Examined",
-                             "Index to All Documents", "Runsheet ", "AI Review", "AI Mapping", "AI Flags", "AI Supporting Docs"]
+                             "Index to All Documents", "Runsheet ", "AI Review", "AI Mapping", "AI Flags", "AI Liens", "AI Easements & Leases", "AI All Fields", "AI Supporting Docs"]
     own = wb["Ownership "]
     assert own["C14"].value == TRACT and own["B11"].value == "Smith Ranch LLC"
     assert own["B1"].value == "Schoeffler Energy Group, Inc."                # template boilerplate kept

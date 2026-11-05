@@ -64,13 +64,31 @@ DOCS = [
 ]
 
 
+def _schema_fields():
+    """Required fields and list fields of the repo's config, so sample records keep matching the schema as the
+    workbook grows. Falls back to the built-in list."""
+    from pathlib import Path
+    cfg = Path(__file__).resolve().parents[2] / "config"
+    try:
+        from .config import load_config
+        schema = load_config(cfg).schema
+    except Exception:
+        return ALL_FIELDS, LIST_FIELDS
+    props = schema["properties"]
+    lists = [k for k, v in props.items() if v["properties"]["value"].get("type") == "array"]
+    return list(dict.fromkeys(ALL_FIELDS + schema["required"])), lists
+
+
 def _record(overrides):
-    rec = {f: F(None) for f in ALL_FIELDS}
+    fields, lists = _schema_fields()
+    rec = {f: F(None) for f in fields}
     rec.update({"county": F("Sample"), "legal_description_text": F(LEGAL), "survey_name": F("H&GN RR Co."),
                 "abstract_no": F("1234"), "block": F("4"), "section": F("22"), "acreage": F("160"),
                 "document_kind": F("recorded instrument")})
     rec.update(overrides)
-    for k in LIST_FIELDS:  # list-typed fields are arrays in the structured output
+    for k in lists:  # list-typed fields are arrays in the structured output
+        if k not in rec:
+            continue
         v = rec[k]["value"]
         rec[k] = {**rec[k], "value": [] if v == "" else ([v] if isinstance(v, str) else v)}
     return rec

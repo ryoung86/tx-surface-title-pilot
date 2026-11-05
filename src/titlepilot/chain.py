@@ -30,6 +30,8 @@ def classify(itype: str) -> str:
         return "pore space agreement" if agreement else "pore space"
     if "judgment" in t or "lis pendens" in t:
         return "judgment"
+    if any(k in t for k in CONVEYANCE_KEYWORDS) and "deed of trust" not in t and "mortgage" not in t:
+        return "conveyance"              # 'warranty deed with vendor's lien' is a deed that retains a lien
     if ("deed of trust" in t or "mortgage" in t or "lien" in t
             or re.search(r"\bucc\b", t) or "financing statement" in t):
         return "lien"
@@ -69,7 +71,8 @@ def _dedupe(names):
 def _slim(i):
     keys = ("instrument_id", "type", "category", "filing_date", "execution_date", "grantors", "grantees",
             "file_name", "acreage", "interest", "kind", "legal", "instrument_no", "mineral_exception",
-            "easements", "liens", "notes", "pages", "ref_keys", "restrictions", "pore_space", "term", "county")
+            "easements", "liens", "notes", "pages", "ref_keys", "restrictions", "pore_space", "term", "county",
+            "values", "calc", "type_conf", "operative", "runsheet_type")
     return {k: i.get(k) for k in keys}
 
 
@@ -127,6 +130,15 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
                               "acreage (tracts.csv) to resolve this automatically"))
     if not conveyances:
         notes.append((None, "No conveyance found in the package: current owner could not be determined"))
+    for i in ordered:
+        if i["category"] != "conveyance" and conveys_fee(i) and (i["category"] in ("other", "unknown")
+                                                                  or i.get("type_conf") == "low"):
+            notes.append((i["instrument_id"], f"Type unclear ('{i['type'] or 'none'}') but the operative words "
+                                              f"('{i.get('operative')}') read like a conveyance. It was not used for "
+                                              "ownership: decide whether it belongs in the chain"))
+
+    for i in ordered:
+        i["calc"] = instrument_calc(i, released, ordered)
 
     encumbrances = [
         {**_slim(i), "holder": holder(i), "status": "released" if i["ref_keys"] & released else "open"}
@@ -147,6 +159,57 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
         "undated": [i["instrument_id"] for i in ordered if not i["filing_date"]],
         "unclassified": [i["instrument_id"] for i in ordered if i["category"] in ("other", "unknown")],
     }
+    result["remaining_acres"] = remaining_acres(vesting, notes, conveyances, subject_acres)
     from .pore import pore_owner
     result["pore_space"] = pore_owner(result)
     return result
+
+
+FEE_WORDS = re.compile(r"\b(?:grants?,?\s+(?:bargains?,?\s+)?sells?|sell\s+and\s+convey|convey(?:s|ed)?\s+(?:unto|to)|"
+                       r"bargain,?\s+sell|quitclaim|release,?\s+remise)", re.I)
+EASEMENT_WORDS = re.compile(r"easement|right[- ]of[- ]way|\bright to (?:lay|construct|install)", re.I)
+
+
+def conveys_fee(i) -> bool:
+    op = i.get("operative") or ""
+    return bool(FEE_WORDS.search(op)) and not EASEMENT_WORDS.search(op) and "lease" not in op.lower()
+
+
+def remaining_acres(vesting, notes, conveyances, subject_acres):
+    """Vesting (or tract) acreage less the out-sales after the vesting deed, when both are known."""
+    base = (vesting or {}).get("acreage") or subject_acres
+    if not base or vesting is None:
+        return None
+    later = conveyances[conveyances.index(vesting) + 1:] if vesting in conveyances else []
+    out = [c["acreage"] for c in later if c.get("acreage") and subject_acres and is_partial_area(c, subject_acres)]
+    return {"base": base, "out_sales": out, "remaining": round(base - sum(out), 3)}
+
+
+def instrument_calc(i, released, ordered) -> dict:
+    """Lien and easement figures worked out in code (see calc.py)."""
+    from .calc import abandonment_months, closure, expiration, lien_figures
+    v = i.get("values") or {}
+    out = {}
+    if i["category"] == "lien":
+        out["lien"] = lien_figures(v.get("lien_amount") or v.get("consideration"), v.get("interest_rate"),
+                                   v.get("lien_term"), v.get("payment_terms"), i.get("execution_date"),
+                                   v.get("maturity_date"))
+    if i["category"] in ("lien", "judgment"):
+        rel = [r for r in ordered if r["category"] == "release" and i["ref_keys"] & set(r["refers_to"])]
+        out["release"] = {"status": ("released" if rel else "no release found"),
+                          "reference": "; ".join(f"{r['instrument_id']} ({r['filing_date'] or 'undated'})" for r in rel)
+                                       or None}
+    if i["category"] in ("easement", "surface agreement", "pore space agreement") or (
+            i["category"] != "release" and re.search(r"\blease", i["type"] or "")):
+        exp, how = expiration(v.get("term") or i.get("term"), v.get("term_years"), v.get("expiration_date"),
+                              i.get("execution_date") or i.get("filing_date"), v.get("perpetual"))
+        out["expiration"] = {"date": exp, "how": how}
+        ab = abandonment_months(v.get("abandonment_period_months"), v.get("abandonment_trigger"))
+        if ab or v.get("abandonment_trigger") or v.get("abandonment_effect"):
+            out["abandonment"] = {"months": ab, "trigger": v.get("abandonment_trigger"),
+                                  "effect": v.get("abandonment_effect")}
+    calls = (i.get("record") or {}).get("metes_and_bounds_calls", {})
+    calls = calls.get("value") if isinstance(calls, dict) else None
+    if isinstance(calls, list) and calls:
+        out["closure"] = closure(calls)
+    return out

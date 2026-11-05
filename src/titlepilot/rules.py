@@ -30,6 +30,7 @@ class Flag:
     severity: str
     instrument_id: str | None
     message: str
+    action: str | None = None
 
 
 @dataclass
@@ -107,10 +108,16 @@ def cites_missing_instrument(ctx, params):
 
 @rule("R13")
 def low_confidence(ctx, params):
+    """One flag per instrument: low-confidence critical fields, and any pages the AI reported as illegible
+    (DR18 merged here)."""
     for i in ctx.instruments:
-        for f in params.get("fields", DEFAULT_CRITICAL):
-            if conf(i["record"], f) == "low":
-                yield i["instrument_id"], f"Low confidence on {f}"
+        low = [f for f in params.get("fields", DEFAULT_CRITICAL) if conf(i["record"], f) == "low"]
+        illegible = as_text(val(i["record"], "legibility"))
+        if illegible and NEGATIVE.match(illegible):
+            illegible = None
+        bits = ([f"low confidence on {', '.join(low)}"] if low else []) + ([f"illegible: {illegible[:200]}"] if illegible else [])
+        if bits:
+            yield i["instrument_id"], "; ".join(bits).capitalize() + ". Check the image"
 
 
 @rule("TS03")
@@ -235,8 +242,13 @@ def document_not_on_runsheet(ctx, params):
 
 @rule("PK04")
 def file_problems(ctx, params):
+    """Duplicate and mislabeled uploads, and (DR03 merged here) a missing clerk's recording stamp."""
     for instrument_id, message in getattr(ctx.intake, "file_checks", None) or []:
         yield instrument_id, message
+    for i in ctx.instruments:
+        stamp = (as_text(val(i["record"], "recording_stamp")) or "").strip().lower()
+        if stamp.startswith("missing") or stamp in ("none", "no stamp", "not present"):
+            yield i["instrument_id"], "No clerk's recording stamp found on the document: confirm it was recorded"
 
 
 @rule("OW01")
@@ -297,5 +309,9 @@ def run_rules(rules_cfg: list[dict], ctx: Ctx):
             skipped.append(r["id"])
             continue
         for instrument_id, message in check(ctx, r.get("params") or {}):
-            flags.append(Flag(r["id"], str(r.get("severity", "Review")), instrument_id, message))
+            flags.append(Flag(r["id"], str(r.get("severity", "Review")), instrument_id, message,
+                              r.get("reviewer_action")))
     return flags, skipped
+
+
+from . import rules_docs  # noqa: E402,F401  (registers the DR, LN, TS and EA checks)

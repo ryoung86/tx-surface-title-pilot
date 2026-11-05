@@ -57,9 +57,9 @@ def export_review(path, intake, run_id, chain, flags, skipped, problems) -> Path
            [[i.get("kind"), i["file_name"]] for i in chain.get("supporting", [])], [30, 60])
 
     fs = wb.create_sheet("Flags")
-    _table(fs, ["Rule", "Severity", "Instrument", "Message", "Reviewer action", "Note"],
-           [[f.rule_id, f.severity, f.instrument_id, f.message, None, None] for f in flags],
-           [8, 12, 22, 70, 16, 40])
+    _table(fs, ["Rule", "Severity", "Instrument", "Message", "What to do", "Reviewer action", "Note"],
+           [[f.rule_id, f.severity, f.instrument_id, f.message, getattr(f, "action", None), None, None] for f in flags],
+           [8, 12, 22, 70, 40, 16, 40])
     for row in fs.iter_rows(min_row=2):
         color = SEVERITY_FILL.get(str(row[1].value).split()[0].lower())
         if color:

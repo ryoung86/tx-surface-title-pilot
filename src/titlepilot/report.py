@@ -9,7 +9,8 @@ Sheets filled, matching the SEG report layout:
   Index to All Documents, Runsheet   every recorded instrument in filing order
 Mineral, NPRI and non-executive sections are left blank: this is a surface report.
 AI sheets are added at the end: AI Review (summary and ownership notes), AI Mapping (out-sales and
-metes and bounds tracts to map), AI Flags, AI Supporting Docs. Everything here is a draft for a landman to check and sign.
+metes and bounds tracts to map), AI Flags, AI Liens, AI Easements & Leases, AI All Fields (every field read, so fields added to the workbook show
+up with no code change), AI Supporting Docs. Everything here is a draft for a landman to check and sign.
 """
 import re
 from copy import copy
@@ -419,6 +420,7 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         ["Run", str(run_id)], ["Tract", intake.tract_id],
         ["Package source", intake.mode + (f" ({intake.runsheet_path.name})" if intake.runsheet_path else "")],
         ["Tract acreage", f"{acres:g}" if acres else "unknown (add to tracts.csv)"],
+        ["Remaining acreage", _remaining(chain.get("remaining_acres"))],
         ["Current surface owner", names(owners) or "NOT DETERMINED"],
         ["Vesting instrument", display_ref(vesting) if vesting else None],
         ["Flags", str(len(flags))],
@@ -443,13 +445,27 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
                [16, 11, 40, 8, 22, 22, 60, 30, 14, 12, 30])
     if to_map:
         ms.sheet_properties.tabColor = "7030A0"
-    fs = table("AI Flags", ["Rule", "Severity", "Instrument", "Message", "Reviewer action", "Note"],
-               [[f.rule_id, f.severity, f.instrument_id, f.message, None, None] for f in flags], [8, 12, 26, 80, 16, 40])
-    colors = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7", "mapping": "E4D7F5"}
+    fs = table("AI Flags", ["Rule", "Severity", "Instrument", "Message", "What to do", "Reviewer action", "Note"],
+               [[f.rule_id, f.severity, f.instrument_id, f.message, getattr(f, "action", None), None, None]
+                for f in flags], [8, 12, 26, 80, 40, 16, 40])
+    colors = {"high": "F8D7DA", "medium": "FFF2CC", "low": "E2EFDA", "review": "DDEBF7", "mapping": "E4D7F5",
+              "note": "EDEDED"}
     for row in fs.iter_rows(min_row=2):
         color = colors.get(str(row[1].value or "").split()[0].lower() if row[1].value else "")
         if color:
             row[1].fill = PatternFill("solid", fgColor=color)
+    liens = [i for i in instruments if i.get("category") in ("lien", "judgment")]
+    table("AI Liens", ["Instrument", "Type", "Filed", "Holder", "Amount", "Rate", "Term", "Maturity",
+                       "Est. months left", "Est. balance", "Release status", "Release", "Missing for estimate"],
+          [_lien_row(i) for i in liens] or [["No liens in the package"] + [None] * 12],
+          [16, 22, 11, 26, 14, 8, 10, 12, 10, 14, 16, 26, 22])
+    esmts = [i for i in instruments if i.get("category") in ("easement", "surface agreement", "pore space agreement")
+             or (i.get("category") != "release" and re.search(r"\blease|easement", i.get("type") or ""))]
+    table("AI Easements & Leases", ["Instrument", "Type", "Filed", "Holder", "Exclusive", "Width", "Term", "Expires",
+                                    "Abandonment", "Crossing limits", "Crossing control", "Assignment", "Preferential rights"],
+          [_esmt_row(i) for i in esmts] or [["No easements or leases in the package"] + [None] * 12],
+          [16, 22, 11, 24, 12, 14, 24, 14, 30, 30, 30, 26, 26])
+    _all_fields_sheet(wb, instruments, head)
     table("AI Supporting Docs", ["Kind", "File"], [[i.get("kind"), i["file_name"]] for i in chain.get("supporting", [])],
           [30, 80])
 
@@ -458,3 +474,61 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     wb.active = 0
     wb.save(path)
     return path
+
+
+def _remaining(r):
+    if not r:
+        return "unknown"
+    outs = " - ".join(f"{a:g}" for a in r["out_sales"])
+    return f"{r['remaining']:g} ac" + (f" ({r['base']:g} - {outs} out-sold; preliminary)" if r["out_sales"] else "")
+
+
+def _v(i, name):
+    return (i.get("values") or {}).get(name)
+
+
+def _lien_row(i):
+    c = (i.get("calc") or {}).get("lien") or {}
+    rel = (i.get("calc") or {}).get("release") or {}
+    return [display_ref(i), i.get("type"), fmt_date(i.get("filing_date")), ", ".join(i.get("grantees") or []) or None,
+            c.get("amount"), f"{c['rate'] * 100:g}%" if c.get("rate") is not None else _v(i, "interest_rate"),
+            f"{c['term_months'] / 12:g} yr" if c.get("term_months") else _v(i, "lien_term"),
+            (c.get("maturity") or "") + (" (calc.)" if c.get("maturity_computed") else "") or None,
+            c.get("months_left"), c.get("balance"), rel.get("status"), rel.get("reference"),
+            ", ".join(c.get("missing") or []) or None]
+
+
+def _esmt_row(i):
+    c = i.get("calc") or {}
+    e, a = c.get("expiration") or {}, c.get("abandonment") or {}
+    exp = e.get("date") or ("perpetual" if e.get("how") == "perpetual" else None)
+    ab = "; ".join(x for x in ((f"{a['months']:g} mo" if a.get("months") else None), a.get("trigger"), a.get("effect")) if x)
+    return [display_ref(i), i.get("type"), fmt_date(i.get("filing_date")), ", ".join(i.get("grantees") or []) or None,
+            _v(i, "easement_exclusive"), _v(i, "easement_width"), _v(i, "term") or i.get("term"),
+            (exp + (" (calc.)" if e.get("how") == "calculated" else "")) if exp else None, ab or None,
+            _v(i, "crossing_restrictions"), _v(i, "crossing_control"), _v(i, "assignment_restrictions"),
+            _v(i, "preferential_rights")]
+
+
+def _all_fields_sheet(wb, instruments, head):
+    """One row per instrument, one column per field the AI read. New fields added to the workbook show up here
+    on the next run with no code change."""
+    names = []
+    for i in instruments:
+        for k in (i.get("values") or {}):
+            if k not in names:
+                names.append(k)
+    s = wb.create_sheet("AI All Fields")
+    s.append(["Instrument", "File"] + names)
+    for c in s[1]:
+        c.font, c.fill = Font(bold=True, color="FFFFFF"), head
+    for i in instruments:
+        vals = i.get("values") or {}
+        s.append([display_ref(i), i.get("file_name")] + [(str(vals.get(n))[:32000] if vals.get(n) is not None else None)
+                                                         for n in names])
+    for n in range(1, len(names) + 3):
+        s.column_dimensions[openpyxl.utils.get_column_letter(n)].width = 18 if n > 2 else 22
+    for row in s.iter_rows(min_row=2):
+        for c in row:
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+    s.freeze_panes = "C2"

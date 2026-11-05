@@ -12,7 +12,18 @@ Rules for every field:
 - Grantee shares: when the instrument gives each grantee a share ("each receiving a 11.625% interest", "an undivided one-half to ..."), put each grantee's share, as written, in that party's share.
 - refers_to: only the recording references (volume/page or instrument number) of earlier instruments this one cites, releases or corrects, one per item, e.g. 'Vol. 594, Page 624' or 'Instrument No. 2011009176'. No descriptions.
 - Dates: give the value as YYYY-MM-DD and the words as written in source_text. Use the clerk's filed or recorded stamp for filing_date.
-- instrument_type: the title of the instrument as written on it (one value). Never 'other'.
+- instrument_type: the title of the instrument as written on it (one value). Never 'other'. If there is no title, or the title doesn't match what the document does, give the type its operative words show (e.g. 'Easement' for an untitled grant of a pipeline right-of-way) and set confidence to medium or low. Decide what the document is from the whole instrument (granting words, what is conveyed or reserved, who gets what), not the header alone.
+- operative_language: the operative words of grant, verbatim ('grant, sell and convey', 'grant an easement', 'lease and let', 'release and discharge').
+- Field groups: the LIENS and EASEMENTS & LEASES groups below are filled only for the instruments they name. When you can't tell whether one applies, fill it: an extra group costs little, a missing one loses information.
+- List formats (one item per entry, parts separated by ' | ', write 'unknown' for a part you can't read):
+  - signatures: name as signed | capacity in the signature block ('individual', 'trustee', 'attorney-in-fact', 'President of ABC LLC', ...) | 'signed' or 'NOT SIGNED'. One item for every party named in the granting clause, including those who did not sign.
+  - acknowledgment: name acknowledged | capacity | venue (county, state) | notary name | seal: yes/no | commission expires: date | date acknowledged. 'none' as the only item if there is no acknowledgment.
+  - metes_and_bounds_calls: bearing | distance with its unit | monument, in order, starting with 'POB | | <monument>' for the point of beginning (e.g. 'N 45°30'15" E | 1,234.56 feet | 1/2 in. iron rod found'). Curves: 'CURVE | arc length with unit | radius, chord bearing and chord distance'.
+  - reserved_fractions: fraction as written | what it is of ('of the minerals', 'of the royalty', 'of the surface').
+  - recited_liens: type | holder | amount | date, as recited.
+  - description_references: reference | recorded, attached, not recorded or not attached.
+- Lien fields: copy amounts, rates and terms as written. Give maturity_date only when the instrument states it. Do not calculate balances or remaining terms.
+- recording_stamp: write 'missing' if there is no clerk's recording stamp.
 - acreage: the acreage this instrument conveys or covers, as a number only.
 - instrument_id: the recording reference only (e.g. 'Vol. 708, Page 1' or 'Instrument No. 2012012111'), without the county name or page ranges.
 - Grantors and grantees: for judgments, abstracts of judgment, lis pendens and lien claims (tax, mechanic's, other), the creditor or claimant goes in grantors and the debtor in grantees. For deeds of trust, the borrower is the grantor and the lender or trustee is the grantee. For UCC financing statements, the debtor is the grantor and the secured party is the grantee.

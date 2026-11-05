@@ -127,6 +127,9 @@ def import_workbook(xlsx, config_dir="config") -> dict:
         applies = _clean(r.get("Applies to (instrument types)"))
         if applies:
             entry["applies_to"] = [x.strip().lower() for x in applies.split(",") if x.strip()]
+        action = _clean(r.get("Reviewer action"))
+        if action:
+            entry["reviewer_action"] = action
         ref = _clean(r.get("Legal reference"))
         if ref:
             entry["legal_reference"] = ref
