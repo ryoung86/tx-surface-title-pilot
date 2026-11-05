@@ -361,6 +361,76 @@ fields:
   type: text
   description: 'What happens as written: automatic termination/reversion, owner may terminate on notice, release required, removal of facilities'
   required: false
+- name: cad_property_id
+  group: taxes
+  type: text
+  description: Appraisal district property ID / account number for the tract
+  required: false
+- name: cad_owner_of_record
+  group: taxes
+  type: text
+  description: Owner name and mailing address shown by the appraisal district
+  required: false
+- name: taxes_current
+  group: taxes
+  type: text
+  description: Yes, No (delinquent) or Unknown, from the county tax assessor-collector or CAD site
+  required: false
+- name: last_tax_year_paid
+  group: taxes
+  type: number
+  description: Most recent tax year shown as paid
+  required: false
+- name: last_amount_paid
+  group: taxes
+  type: number
+  description: Amount of the last tax payment shown, in dollars
+  required: false
+- name: last_payment_date
+  group: taxes
+  type: date
+  description: Date of the last payment shown, YYYY-MM-DD
+  required: false
+- name: delinquent_amount
+  group: taxes
+  type: number
+  description: Delinquent taxes, penalties and interest due, if any
+  required: false
+- name: exemptions_special_valuation
+  group: taxes
+  type: text
+  description: Homestead, ag/open-space (1-d-1), wildlife or other exemptions or special valuations shown
+  required: false
+- name: tax_check_source
+  group: taxes
+  type: text
+  description: Site checked (CAD and/or tax assessor-collector) and date checked
+  required: false
+- name: legal_description_preliminary
+  group: tract output
+  type: text
+  description: Generated tract description built from the vesting deed's description, less each save-and-except with its instrument no., and the computed remaining acreage (e.g. 'LEAVING A TOTAL of 105.585 acres'). Always labeled PRELIMINARY until a reviewer approves it
+  required: false
+- name: less_and_except_instruments
+  group: tract output
+  type: list
+  description: Recording reference and acreage of each save-and-except or out-sale used in the generated description
+  required: false
+- name: remaining_acreage
+  group: tract output
+  type: number
+  description: 'Computed: vesting acreage minus excepted acreage'
+  required: false
+- name: legal_description_status
+  group: tract output
+  type: text
+  description: Preliminary or Approved. Only a named reviewer can set Approved
+  required: false
+- name: legal_description_approved_by
+  group: tract output
+  type: text
+  description: Reviewer name and date of approval. Empty while preliminary
+  required: false
 - name: encumbrance_type
   group: core
   type: text
@@ -370,4 +440,14 @@ fields:
   group: core
   type: text
   description: Grantee mailing address as stated in the deed (often after the grantee name or in a "mail tax statements to" / "after recording return to" block), verbatim, per grantee
+  required: false
+- name: cad_mailing_address
+  group: taxes
+  type: text
+  description: Owner mailing address on the appraisal district record, verbatim. KEY ADDRESS for mailing Initial Offer Letters (IOL) and Final Offer Letters (FOL) in condemnation
+  required: true
+- name: notice_address
+  group: tract output
+  type: text
+  description: 'Address used for IOL/FOL mailings: always the appraisal district mailing address (cad_mailing_address). Deed address is not used for mailing'
   required: false

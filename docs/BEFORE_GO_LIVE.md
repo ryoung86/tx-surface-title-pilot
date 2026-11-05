@@ -27,10 +27,9 @@ same day out of order. Tune these so the review workbook leads with what needs a
 
 **Status:** Proposed rows in the workbook (decided 2026-11-05).
 
-- Phase 2: tax and appraisal district data (TX01, AD01, the Taxes fields, notice_address for IOL/FOL), and the
-  preliminary legal description generator (LD01: vesting description less each save-and-except, remaining acreage,
-  approval by a named reviewer). Needs a decision on the data source: the agent's printouts in the package, or
-  automated lookups.
+- Phase 2: built in 0.11.0 (taxes and CAD from the agent's printouts, notice address, preliminary legal
+  description). Still to settle: whether save-and-excepts written inside the vesting deed itself should be
+  subtracted automatically (today they are shown as written and only later out-sales are subtracted).
 - Phase 3: likely current easement holder (EA06: RRC pipeline data, SOS records, successor companies; note only),
   and the current fee owner, certificate block and IOL/FOL outputs once the project templates are settled.
 

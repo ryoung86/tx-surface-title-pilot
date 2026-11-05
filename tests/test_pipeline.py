@@ -507,7 +507,7 @@ def test_title_report_in_seg_format(sample, tmp_path):
     res = run_tract(sample / TRACT, load_config(CONFIG), db, tmp_path / "out", mock=True, log=lambda *_: None)
     wb = openpyxl.load_workbook(res["report"])
     assert wb.sheetnames == ["Ownership ", "Ownership BT Data", "Encumbrances", "ROWs and Easements", "Flowchart", "Names Examined",
-                             "Index to All Documents", "Runsheet ", "AI Review", "AI Mapping", "AI Flags", "AI Liens", "AI Easements & Leases", "AI All Fields", "AI Supporting Docs"]
+                             "Index to All Documents", "Runsheet ", "AI Review", "AI Mapping", "AI Flags", "AI Liens", "AI Easements & Leases", "AI Taxes & CAD", "AI Legal Description", "AI All Fields", "AI Supporting Docs"]
     own = wb["Ownership "]
     assert own["C14"].value == TRACT and own["B11"].value == "Smith Ranch LLC"
     assert own["B1"].value == "Schoeffler Energy Group, Inc."                # template boilerplate kept

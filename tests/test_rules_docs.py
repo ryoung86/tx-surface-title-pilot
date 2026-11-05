@@ -33,8 +33,9 @@ def inst(file, iid, itype, filed, grantors, grantees, **fields):
     return n
 
 
-def flags(instruments, rule_ids, runsheet=None, params=None):
-    chain = build_chain(instruments, None)
+def flags(instruments, rule_ids, runsheet=None, params=None, acres=None):
+    chain = build_chain(instruments, acres)
+    instruments = [i for i in instruments if i.get("recorded", True)]
     intake = SimpleNamespace(runsheet_entries=runsheet or [], owners=[], file_checks=[], legal_description=None)
     cfg = [{"id": r, "severity": "High", "params": (params or {}).get(r, {})} for r in rule_ids]
     out, skipped = run_rules(cfg, Ctx(instruments, chain, intake))
@@ -218,3 +219,52 @@ def test_instructions_sent_as_cached_system_prompt(monkeypatch):
     ex._ask([{"type": "text", "text": "page"}], schema, "INSTRUCTIONS")
     assert seen["system"][0]["text"] == "INSTRUCTIONS" and seen["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "INSTRUCTIONS" not in json.dumps(seen["messages"])
+
+
+
+# --------------------------------------------------------------------------------------------- Phase 2
+
+def _tract(cad_owner="SMITH RANCH LLC", current="Yes", owed="", ag="1-d-1 agricultural valuation",
+           deed_addr="PO Box 12, Pecos, TX 79772", cad_addr="P.O. Box 12, Pecos, Texas 79772"):
+    vest = inst("v.pdf", "Vol. 100, Page 1", "Warranty Deed", "1994-08-15", [P("John Smith")],
+                [P("Smith Ranch LLC", marital="")], acreage="160",
+                legal="160 acres, Section 22, Block 4, H&GN RR Co. Survey, Abstract 1234",
+                grantee_mailing_address=deed_addr)
+    out = inst("w.pdf", "Vol. 120, Page 5", "Warranty Deed", "2005-02-01", [P("Smith Ranch LLC", marital="")],
+               [P("Neighbor", marital="single")], acreage="5.25")
+    tax = inst("cad.pdf", "", "", "", [], [], document_kind="tax or appraisal record", cad_property_id="R12345",
+               cad_owner_of_record=cad_owner + ", " + cad_addr, cad_mailing_address=cad_addr, taxes_current=current,
+               last_tax_year_paid="2025", last_amount_paid="$1,234.56", delinquent_amount=owed,
+               exemptions_special_valuation=ag, tax_check_source="Reeves CAD website, printed 2026-11-01")
+    return [vest, out, tax]
+
+
+def test_taxes_address_and_legal_description():
+    docs = _tract()
+    chain = build_chain(docs, 160)
+    assert chain["tax"]["notice_address"] == "P.O. Box 12, Pecos, Texas 79772"
+    ld = chain["legal_description"]
+    assert ld["remaining_acreage"] == 154.75 and ld["status"] == "Preliminary"
+    assert "PRELIMINARY" in ld["text"] and "Vol. 120, Page 5" in ld["text"] and "LEAVING A TOTAL of 154.75 acres" in ld["text"]
+    out = flags(docs, ["TX01", "AD01", "LD01"], acres=160)
+    sev = {(f.rule_id, f.severity) for f in out}
+    assert ("TX01", "Note") in sev and ("LD01", "High") in sev        # LD01 takes the rule's severity
+    assert not any(f.rule_id == "AD01" for f in out)                 # same address, written differently
+    assert any("rollback" in f.message for f in out)
+
+
+def test_tax_problems():
+    docs = _tract(cad_owner="JONES FAMILY TRUST", current="No", owed="$3,210.00", ag="",
+                  deed_addr="123 Main Street, Odessa, TX")
+    out = flags(docs, ["TX01", "AD01"], acres=160)
+    msgs = {(f.rule_id, f.severity): f.message for f in out}
+    assert "delinquent" in msgs[("TX01", "High")] and "3,210.00" in msgs[("TX01", "High")]
+    assert "JONES FAMILY TRUST" in msgs[("TX01", "Review")]
+    assert "appraisal district address is used" in msgs[("AD01", "High")]
+
+
+def test_no_tax_printout():
+    vest = _tract()[0]
+    out = flags([vest], ["TX01"])
+    assert [(f.severity, "ask the agent" in f.message) for f in out] == [("Review", True)]
+    assert build_chain([vest])["tax"]["notice_address"] is None

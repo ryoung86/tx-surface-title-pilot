@@ -160,6 +160,11 @@ def build_chain(instruments: list[dict], subject_acres: float | None = None) -> 
         "unclassified": [i["instrument_id"] for i in ordered if i["category"] in ("other", "unknown")],
     }
     result["remaining_acres"] = remaining_acres(vesting, notes, conveyances, subject_acres)
+    from .tract import preliminary_legal, tax_summary
+    ra = result["remaining_acres"]
+    result["legal_description"] = preliminary_legal(_slim(vesting) if vesting else None,
+                                                    (ra or {}).get("out_sale_instruments", []), ra)
+    result["tax"] = tax_summary(result["supporting"], result["instruments"])
     from .pore import pore_owner
     result["pore_space"] = pore_owner(result)
     return result
@@ -181,8 +186,11 @@ def remaining_acres(vesting, notes, conveyances, subject_acres):
     if not base or vesting is None:
         return None
     later = conveyances[conveyances.index(vesting) + 1:] if vesting in conveyances else []
-    out = [c["acreage"] for c in later if c.get("acreage") and subject_acres and is_partial_area(c, subject_acres)]
-    return {"base": base, "out_sales": out, "remaining": round(base - sum(out), 3)}
+    out = [c for c in later if c.get("acreage") and subject_acres and is_partial_area(c, subject_acres)]
+    return {"base": base, "out_sales": [c["acreage"] for c in out],
+            "out_sale_instruments": [{"instrument_id": c["instrument_id"], "acreage": c["acreage"],
+                                      "grantees": c["grantees"], "filing_date": c["filing_date"]} for c in out],
+            "remaining": round(base - sum(c["acreage"] for c in out), 3)}
 
 
 def instrument_calc(i, released, ordered) -> dict:

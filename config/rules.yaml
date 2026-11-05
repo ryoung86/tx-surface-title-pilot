@@ -383,3 +383,25 @@ rules:
   - wind lease
   - ground lease
   reviewer_action: Check whether the abandonment period has run (facilities removed, no use); if so, seek a release or recorded termination
+- id: TX01
+  name: 'Check the county appraisal district and tax assessor-collector: confirm taxes are current and record the last amount paid'
+  severity: High if delinquent, else Note
+  enabled: true
+  applies_to:
+  - every tract
+  reviewer_action: Record CAD ID, owner of record, last year and amount paid, any delinquency and exemptions. Flag delinquency, CAD owner differing from chain owner, or ag valuation (rollback)
+  legal_reference: County appraisal district and tax assessor-collector websites
+- id: LD01
+  name: Generated legal description is preliminary until approved by a reviewer
+  severity: Review
+  enabled: true
+  applies_to:
+  - every tract
+  reviewer_action: Check the vesting description, each save-and-except and the remaining acreage; approve or correct. Do not issue a certificate with a preliminary description
+- id: AD01
+  name: Deed mailing address differs from the appraisal district mailing address
+  severity: Note
+  enabled: true
+  applies_to:
+  - every tract
+  reviewer_action: Flag only. Appraisal district address wins and is used for IOL/FOL; no action required

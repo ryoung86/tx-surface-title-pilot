@@ -308,9 +308,10 @@ def run_rules(rules_cfg: list[dict], ctx: Ctx):
         if check is None:
             skipped.append(r["id"])
             continue
-        for instrument_id, message in check(ctx, r.get("params") or {}):
-            flags.append(Flag(r["id"], str(r.get("severity", "Review")), instrument_id, message,
-                              r.get("reviewer_action")))
+        for hit in check(ctx, r.get("params") or {}):
+            instrument_id, message = hit[0], hit[1]
+            severity = hit[2] if len(hit) > 2 else str(r.get("severity", "Review"))   # a check may set its own
+            flags.append(Flag(r["id"], severity, instrument_id, message, r.get("reviewer_action")))
     return flags, skipped
 
 

@@ -9,7 +9,8 @@ Sheets filled, matching the SEG report layout:
   Index to All Documents, Runsheet   every recorded instrument in filing order
 Mineral, NPRI and non-executive sections are left blank: this is a surface report.
 AI sheets are added at the end: AI Review (summary and ownership notes), AI Mapping (out-sales and
-metes and bounds tracts to map), AI Flags, AI Liens, AI Easements & Leases, AI All Fields (every field read, so fields added to the workbook show
+metes and bounds tracts to map), AI Flags, AI Liens, AI Easements & Leases, AI Taxes & CAD, AI Legal Description
+(preliminary, approved by a named reviewer), AI All Fields (every field read, so fields added to the workbook show
 up with no code change), AI Supporting Docs. Everything here is a draft for a landman to check and sign.
 """
 import re
@@ -421,6 +422,9 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
         ["Package source", intake.mode + (f" ({intake.runsheet_path.name})" if intake.runsheet_path else "")],
         ["Tract acreage", f"{acres:g}" if acres else "unknown (add to tracts.csv)"],
         ["Remaining acreage", _remaining(chain.get("remaining_acres"))],
+        ["Notice address (IOL/FOL)", (chain.get("tax") or {}).get("notice_address")
+         or "NOT AVAILABLE: add the appraisal district printout (the deed address is not used)"],
+        ["Taxes", _tax_line(chain.get("tax") or {})],
         ["Current surface owner", names(owners) or "NOT DETERMINED"],
         ["Vesting instrument", display_ref(vesting) if vesting else None],
         ["Flags", str(len(flags))],
@@ -465,6 +469,30 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
                                     "Abandonment", "Crossing limits", "Crossing control", "Assignment", "Preferential rights"],
           [_esmt_row(i) for i in esmts] or [["No easements or leases in the package"] + [None] * 12],
           [16, 22, 11, 24, 12, 14, 24, 14, 30, 30, 30, 26, 26])
+    tx = chain.get("tax") or {}
+    labels = {"cad_property_id": "CAD property ID", "cad_owner_of_record": "CAD owner of record",
+              "cad_mailing_address": "CAD mailing address", "notice_address": "Notice address (IOL/FOL)",
+              "taxes_current": "Taxes current", "last_tax_year_paid": "Last tax year paid",
+              "last_amount_paid": "Last amount paid", "last_payment_date": "Last payment date",
+              "delinquent_amount": "Delinquent amount", "exemptions_special_valuation": "Exemptions / special valuation",
+              "tax_check_source": "Source checked"}
+    table("AI Taxes & CAD", ["Item", "Value"],
+          [[v, tx.get(k)] for k, v in labels.items()] + [["Printouts read", "\n".join(tx.get("files") or []) or
+                                                          "none: ask the agent to add the CAD and tax printouts"]],
+          [32, 90])
+    ld = chain.get("legal_description") or {}
+    ls = table("AI Legal Description", ["Item", "Value"], [
+        ["Status", ld.get("status") or "Not generated"],
+        ["Approved by (reviewer name)", None], ["Date approved", None],
+        ["Vesting instrument", ld.get("vesting_instrument")],
+        ["Save-and-excepts subtracted", "\n".join(ld.get("less_and_except_instruments") or []) or "none"],
+        ["Remaining acreage", ld.get("remaining_acreage")],
+        ["Preliminary description", ld.get("text") or "The vesting deed's description wasn't read"],
+    ], [32, 110])
+    yellow = PatternFill("solid", fgColor="FFF2CC")
+    for r in (3, 4):
+        ls.cell(r, 2).fill = yellow
+    ls.cell(8, 2).alignment = Alignment(wrap_text=True, vertical="top")
     _all_fields_sheet(wb, instruments, head)
     table("AI Supporting Docs", ["Kind", "File"], [[i.get("kind"), i["file_name"]] for i in chain.get("supporting", [])],
           [30, 80])
@@ -481,6 +509,14 @@ def _remaining(r):
         return "unknown"
     outs = " - ".join(f"{a:g}" for a in r["out_sales"])
     return f"{r['remaining']:g} ac" + (f" ({r['base']:g} - {outs} out-sold; preliminary)" if r["out_sales"] else "")
+
+
+def _tax_line(tx):
+    if not tx.get("files"):
+        return "no appraisal district or tax printout in the package"
+    if tx.get("delinquent"):
+        return f"DELINQUENT {tx.get('delinquent_amount') or ''}".strip()
+    return f"current: {tx.get('taxes_current') or 'not shown'}; last year paid {tx.get('last_tax_year_paid') or '?'}"
 
 
 def _v(i, name):

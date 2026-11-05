@@ -633,3 +633,79 @@ def abandonment_clause(ctx, params):
         effect = f"; effect: {short(a['effect'], 100)}" if a.get("effect") else ""
         rel = " A release is in the package." if i["ref_keys"] & released else " No release found."
         yield i["instrument_id"], f"Abandonment provision: {months}{short(what, 100)}{effect}.{rel} Confirm whether it is still in use"
+
+
+# ---------------------------------------------------------------------------------- taxes, address, legal
+
+
+def _owner_matches(owners, cad_text):
+    words = set(re.findall(r"[a-z0-9]+", str(cad_text or "").lower()))
+    for o in owners:
+        ow = {w for w in re.findall(r"[a-z0-9]+", o.lower()) if w not in ("llc", "inc", "ltd", "lp", "the", "and", "et", "al", "ux")}
+        if ow and len(ow & words) >= max(1, min(2, len(ow))):
+            return True
+    return False
+
+
+@rule("TX01")
+def taxes(ctx, params):
+    """Severity: High if delinquent, else Note (Review when the printout is missing or the CAD owner differs)."""
+    tx = ctx.chain.get("tax") or {}
+    if not tx.get("files"):
+        yield None, "No appraisal district or tax printout in the package: ask the agent to add them", "Review"
+        return
+    src = f" (source: {tx['tax_check_source']})" if tx.get("tax_check_source") else ""
+    if tx.get("delinquent"):
+        owed = f" ${number_text(tx.get('delinquent_amount'))} due" if tx.get("delinquent_amount") else ""
+        yield None, f"Taxes delinquent{owed}; last year paid {tx.get('last_tax_year_paid') or '?'}{src}", "High"
+    else:
+        paid = ", ".join(x for x in (
+            f"last year paid {tx['last_tax_year_paid']}" if tx.get("last_tax_year_paid") else None,
+            f"last paid ${number_text(tx['last_amount_paid'])}" if tx.get("last_amount_paid") else None,
+            f"on {tx['last_payment_date']}" if tx.get("last_payment_date") else None) if x)
+        state = "Taxes current" if (tx.get("taxes_current") or "").lower().startswith("yes") else "Tax status not shown"
+        yield None, f"{state}{': ' + paid if paid else ''}; CAD ID {tx.get('cad_property_id') or '?'}{src}", "Note"
+    owners = ctx.chain.get("current_owner") or []
+    if tx.get("cad_owner_of_record") and owners and not _owner_matches(owners, tx["cad_owner_of_record"]):
+        yield None, (f"Appraisal district owner '{short(tx['cad_owner_of_record'], 100)}' differs from the record owner "
+                     f"{', '.join(owners)}: check for an unrecorded conveyance"), "Review"
+    ex = tx.get("exemptions_special_valuation") or ""
+    if re.search(r"\bag\b|agricult|1-d-1|1d1|open[- ]space|wildlife|timber", ex, re.I):
+        yield None, f"Special valuation ({short(ex, 80)}): a change of use can trigger rollback taxes", "Note"
+
+
+def number_text(v):
+    from .validate import number
+    n = number(v)
+    return f"{n:,.2f}" if n is not None else str(v)
+
+
+def _addr_key(a):
+    a = str(a or "").lower()
+    for k, v in (("street", "st"), ("road", "rd"), ("avenue", "ave"), ("drive", "dr"), ("lane", "ln"),
+                 ("highway", "hwy"), ("post office box", "po box"), ("p.o. box", "po box"), ("p o box", "po box")):
+        a = a.replace(k, v)
+    return " ".join(re.findall(r"[a-z0-9]+", a))
+
+
+@rule("AD01")
+def address_differs(ctx, params):
+    tx = ctx.chain.get("tax") or {}
+    cad = tx.get("cad_mailing_address")
+    vest = next((i for i in ctx.instruments if i["instrument_id"] == ctx.chain.get("vesting_instrument")), None)
+    deed = text(vest, "grantee_mailing_address") if vest else None
+    if cad and deed and token_sort_ratio(_addr_key(cad), _addr_key(deed)) < 85:
+        yield vest["instrument_id"], (f"Deed mailing address '{short(deed, 90)}' differs from the appraisal district's "
+                                      f"'{short(cad, 90)}'. The appraisal district address is used for IOL/FOL")
+
+
+@rule("LD01")
+def legal_preliminary(ctx, params):
+    ld = ctx.chain.get("legal_description")
+    if not ld:
+        yield None, "No legal description generated: the vesting deed's description wasn't read", "Review"
+        return
+    n = len(ld["less_and_except_instruments"])
+    acres = f"{ld['remaining_acreage']:g} ac remaining" if ld.get("remaining_acreage") is not None else "acreage unknown"
+    yield ld["vesting_instrument"], (f"Generated legal description is PRELIMINARY ({acres}, {n} save-and-except(s) "
+                                     "subtracted). Check and approve or correct it on the AI Legal Description sheet")

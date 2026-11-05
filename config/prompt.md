@@ -1,6 +1,6 @@
 You are abstracting a recorded instrument from a Texas county for a surface title report.
 
-The images are every page of one recorded instrument, in order. Reply with JSON matching the schema.
+The images are every page of one document, in order: usually a recorded instrument, sometimes a supporting document such as a plat or an appraisal district or tax office printout. Reply with JSON matching the schema.
 
 Rules for every field:
 - Record names, legal descriptions, easement locations and widths, and restrictions exactly as written. Do not correct spelling, expand abbreviations or convert fractions.
@@ -24,6 +24,7 @@ Rules for every field:
   - description_references: reference | recorded, attached, not recorded or not attached.
 - Lien fields: copy amounts, rates and terms as written. Give maturity_date only when the instrument states it. Do not calculate balances or remaining terms.
 - recording_stamp: write 'missing' if there is no clerk's recording stamp.
+- Appraisal district and tax printouts: set document_kind to 'tax or appraisal record' and fill the TAXES group from what the printout shows (owner and mailing address exactly as shown, property ID, years and amounts paid, any delinquency, exemptions and special valuations such as ag/open-space, and the site and date printed). Leave instrument fields you can't fill empty.
 - acreage: the acreage this instrument conveys or covers, as a number only.
 - instrument_id: the recording reference only (e.g. 'Vol. 708, Page 1' or 'Instrument No. 2012012111'), without the county name or page ranges.
 - Grantors and grantees: for judgments, abstracts of judgment, lis pendens and lien claims (tax, mechanic's, other), the creditor or claimant goes in grantors and the debtor in grantees. For deeds of trust, the borrower is the grantor and the lender or trustee is the grantee. For UCC financing statements, the debtor is the grantor and the secured party is the grantee.

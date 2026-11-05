@@ -82,9 +82,10 @@ GROUP_SCOPE = {
     "easements & leases": "easements and rights-of-way (pipeline, road, utility, access), and surface, solar, wind, "
                           "ground, grazing, hunting, agricultural, CO2 storage and oil and gas leases, surface use, "
                           "damage and accommodation agreements",
+    "taxes": "appraisal district (CAD) and county tax assessor-collector printouts or web pages",
 }
 # Worked out by the program, never asked of the model.
-NOT_ASKED_GROUPS = {"tract output", "taxes"}
+NOT_ASKED_GROUPS = {"tract output"}
 CALCULATED = {"estimated_remaining_term", "estimated_remaining_balance", "release_status", "release_reference",
               "remaining_acreage"}
 
