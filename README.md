@@ -37,6 +37,7 @@ The sample tract is invented: a 1978 deed, a deed of trust and its release, an u
    - `<tract>_title_report.xlsx`: the title report in SEG's format (Ownership, Ownership BT Data, Encumbrances, Flowchart, Names Examined, Index to All Documents, Runsheet), plus AI Review, AI Flags and AI Supporting Docs sheets at the end. It's a draft for a landman to check and sign.
    - `<tract>_review.xlsx`: the plainer working view (Summary, Chain, Encumbrances, Flags).
 5. **Score (pilot only).** Put the verified results in an answer key folder and run `titlepilot score path/to/answer_key`.
+6. **Index in Supabase (testing).** `titlepilot index path/to/tract` uploads the tract's files and the run's readings, flags and reports to Supabase; `titlepilot search --tract / --owner / --text / --ref` calls them back up. Setup: `docs/SUPABASE_SETUP.md`.
 
 ## What the title agent delivers
 

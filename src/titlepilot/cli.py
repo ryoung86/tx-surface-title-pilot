@@ -53,7 +53,45 @@ def main(argv=None):
     s = sub.add_parser("score", help="score the latest run of each tract against an answer key folder")
     s.add_argument("answer_dir")
 
+    s = sub.add_parser("index", help="upload a tract's files to Supabase Storage and index them (with the latest "
+                                     "run's readings) in the Supabase database")
+    s.add_argument("folder", nargs="+", help="one or more tract folders")
+    s.add_argument("--run", type=int, help="index this run number instead of the latest")
+    s.add_argument("--out", default="output", help="where the run reports are (default: output)")
+    s.add_argument("--files-only", action="store_true", help="upload and index the files without any readings")
+
+    s = sub.add_parser("search", help="call up indexed tracts and documents from Supabase")
+    g = s.add_mutually_exclusive_group(required=True)
+    g.add_argument("--tract", help="every document on a tract")
+    g.add_argument("--owner", help="documents naming this owner or party (fuzzy)")
+    g.add_argument("--text", help="any words: types, references, names, legal descriptions, fields")
+    g.add_argument("--ref", help="a recording reference on any tract, e.g. '1279/279' or 'Vol 1279 Pg 279'")
+    s.add_argument("--in-tract", help="with --text: only this tract")
+    s.add_argument("--links", action="store_true", help="add a link to open each file (valid one hour)")
+
     a = p.parse_args(argv)
+
+    if a.cmd in ("index", "search"):
+        from .supa import Supabase, SupabaseError
+        try:
+            sb = Supabase()
+            if a.cmd == "index":
+                from .index import index_tract
+                db = None if a.files_only else DB(a.db)
+                rules = load_config(a.config).rules if not a.files_only else []
+                for folder in a.folder:
+                    print(f"Indexing {folder} ...")
+                    r = index_tract(folder, sb, db, run_id=a.run, out_dir=a.out, rules=rules)
+                    print(f"  {r['tract']}: {r['files']} files ({r['uploaded']} uploaded, {r['unchanged']} unchanged), "
+                          f"{r['with_readings']} with readings, {r['parties']} parties"
+                          + (f", run {r['run']} with {r['flags']} flags" if r["run"] else ", no run yet")
+                          + (f", reports: {', '.join(r['reports'])}" if r["reports"] else ""))
+            else:
+                _search(sb, a)
+        except SupabaseError as e:
+            print(f"Supabase: {e}")
+            raise SystemExit(1)
+        return
 
     if a.cmd == "import-config":
         from .import_config import import_workbook
@@ -125,3 +163,31 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
+
+def _search(sb, a):
+    if a.tract:
+        rows = sb.rpc("tract_documents", tract=a.tract)
+        cols = ["filing_date", "instrument_id", "instrument_type", "kind", "file_name"]
+    elif a.owner:
+        rows = sb.rpc("search_owner", q=a.owner)
+        cols = ["tract_id", "name", "role", "similarity", "filing_date", "instrument_id", "instrument_type"]
+    elif a.ref:
+        rows = sb.rpc("find_instrument", ref=a.ref)
+        cols = ["tract_id", "instrument_id", "instrument_type", "filing_date"]
+    else:
+        rows = sb.rpc("search_documents", q=a.text, tract=a.in_tract)
+        cols = ["tract_id", "filing_date", "instrument_id", "instrument_type", "file_name"]
+    if not rows:
+        print("Nothing found.")
+        return
+    def cell(r, c):
+        v = r.get(c)
+        return f"{v:.2f}" if isinstance(v, float) else ("" if v is None else str(v))
+    widths = {c: min(40, max(len(c), *(len(cell(r, c)) for r in rows))) for c in cols}
+    print("  ".join(c.ljust(widths[c]) for c in cols))
+    for r in rows:
+        print("  ".join(cell(r, c)[:40].ljust(widths[c]) for c in cols))
+        if a.links and r.get("storage_path"):
+            print("    " + sb.signed_url(r["storage_path"]))
+    print(f"{len(rows)} found")

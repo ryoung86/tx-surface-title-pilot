@@ -40,7 +40,7 @@ noisy). Check the counts on the next API run of 0180 and tune thresholds or seve
 
 ## Web app for title agents (idea, not started)
 
-**Status:** discussed 2026-11-05; not started, details still being worked out.
+**Status:** discussed 2026-11-05. Supabase indexing test built 2026-11-12 (0.12.0, docs/SUPABASE_SETUP.md); website, worker and sorting step not started.
 
 Outline: website on Vercel (upload, run status, review, approval, admin); Supabase for login (company Microsoft
 accounts, roles agent / landman / admin), Postgres (tracts, runs, flags, approvals, costs) and file storage; the
