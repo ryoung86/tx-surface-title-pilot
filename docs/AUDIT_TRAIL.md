@@ -38,6 +38,7 @@ Newest at the bottom. Commit IDs point to the full change on GitHub. **Add an en
 - **R10 kept separate from DR10:** R10 compares an instrument with the prior one for the same tract; DR10 checks the calls themselves. Not merged.
 - **TX01 wording:** removed a reference to rule 'T06', which doesn't exist.
 - **11/05 Web app idea discussed** (Vercel + Supabase + AWS workers, optional SFTP bridge). Not started; outline in docs/BEFORE_GO_LIVE.md.
+- **11/12 Supabase shelved:** indexing test (0.12.0) stays in the repo, unused until picked back up. Focus returns to the title tool.
 - **Counsel:** add DR14 (Duhig v. Peavy-Moore, Tex. 1940) to the legal references to confirm.
 
 - **10/30 Landman review doc made** (Surface Title AI Pilot: Landman Review): abbreviated plan without setup steps for reviewing processes with landmen: workflow diagram, report contents, all 25 rules with landman actions and Live/Planned status, results, sign-off, risks and decisions, and this audit trail. Why: landmen need the process, not the build.
