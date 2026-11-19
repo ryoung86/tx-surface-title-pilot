@@ -62,6 +62,8 @@ tract_id,acreage,county,legal_description
 CCS.TX.SDY.0143,4.6,Liberty,"4.60 acres, more or less, in the I & G N Railroad Company Survey #4, Abstract 289..."
 ```
 
+Names Examined: put the agent's names checklist in the tract folder (a .docx, .xlsx or .csv with "name" and "checklist", "researched" or "examined" in its file name, like `SEGI Name Checklist.docx`). Its names, From/Through dates and index columns (Grantor, Grantee, Deed of Trust, Defendant, Probate, UCC, ...) fill the tab, with an X under each index searched. Without one, the tracts.csv column `indices_examined` (for example `vendor; vendee; probates`) marks the same indices for every name.
+
 Optional columns: `certified_through` (the date the county records are certified through; it becomes the report's title end date, as on SEG's reports; the intake form label is "Records certified through"), `aoi`, `researcher`, `researched_from`, `researched_to`.
 
 The acreage matters: it is how the code tells an out-sale (a deed covering part of the tract, like a 1-acre sale out of a 5.6-acre deed) from a conveyance of the whole tract. Without it, the last conveyance is taken as vesting and OW01 asks the reviewer to confirm. Acreage can also come from the intake form's legal description or a tract runsheet.
