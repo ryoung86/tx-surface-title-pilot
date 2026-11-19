@@ -53,6 +53,11 @@ def main(argv=None):
     s = sub.add_parser("score", help="score the latest run of each tract against an answer key folder")
     s.add_argument("answer_dir")
 
+    s = sub.add_parser("score-seg", help="score a title report workbook against SEG's finished surface COT workbook")
+    s.add_argument("report", help="this program's title report (.xlsx)")
+    s.add_argument("seg", help="SEG's surface ownership report / COT (.xlsx)")
+    s.add_argument("--out", help="write the comparison here as Markdown (default: print it)")
+
     s = sub.add_parser("index", help="upload a tract's files to Supabase Storage and index them (with the latest "
                                      "run's readings) in the Supabase database")
     s.add_argument("folder", nargs="+", help="one or more tract folders")
@@ -156,6 +161,15 @@ def main(argv=None):
                 print(f"  review workbook: {res['review']}")
         return
 
+    if a.cmd == "score-seg":
+        from .score_seg import compare, to_markdown
+        md = to_markdown(compare(a.report, a.seg), a.report, a.seg)
+        if a.out:
+            Path(a.out).write_text(md, encoding="utf-8")
+            print(f"Wrote {a.out}")
+        else:
+            print(md)
+        return
     if a.cmd == "score":
         from .score import score
         print(json.dumps(score(db, a.answer_dir), indent=2))

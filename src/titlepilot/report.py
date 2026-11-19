@@ -110,6 +110,89 @@ def names(lst) -> str:
     return ", ".join(n for n in (lst or []) if n)
 
 
+RECORD_NAMES = {"DR": "Deed Records", "OPR": "Official Public Records", "OR": "Official Records",
+                "DT": "Deed of Trust Records", "PR": "Probate Records"}
+_STREET_END = re.compile(r"^(.*\b(?:P\.?\s*O\.?\s*BOX\s+\d+|(?:ST|STREET|AVE|AVENUE|RD|ROAD|DR|DRIVE|BLVD|LN|LANE|HWY|"
+                         r"HIGHWAY|PKWY|CT|CIR|WAY|PL|TRL|FM\s*\d+)\.?(?:\s+(?:STE|SUITE|#|APT|UNIT)\.?\s*\w+)?))\s+"
+                         r"([A-Za-z .]+?),?\s+(TX|TEXAS)\.?\s+(\d{5}(?:-\d{4})?)$", re.I)
+
+
+def format_address(addr) -> str | None:
+    """'PO BOX 52267 MIDLAND TX 79710' -> 'P.O. Box 52267\\nMidland, Texas 79710' (SEG's style). Addresses
+    that don't parse are returned as written, one line."""
+    if not addr:
+        return None
+    a = re.sub(r"\s*\(from [^)]*\)\s*$", "", str(addr)).strip()
+    a = re.sub(r"\s+", " ", a)
+    m = _STREET_END.match(a)
+    if not m:
+        return a
+    street = re.sub(r"\bP\.?\s*O\.?\s*BOX\b", "P.O. Box", m.group(1).title(), flags=re.I)
+    return f"{street}\n{m.group(2).strip().title()}, Texas {m.group(4)}"
+
+
+def owner_full_name(name, vesting) -> str:
+    """The owner as the vesting deed names it, with its description ('..., LLC, a Texas limited liability
+    company'), when the grantee there starts with the short name."""
+    short = re.sub(r"[\s,.]+$", "", name or "").lower()
+    for g in (vesting or {}).get("grantees") or []:
+        if g and g.lower().startswith(short) and len(g) > len(short) + 3:
+            return g.strip()
+    return name
+
+
+def owner_block(name, vesting, chain) -> str:
+    """Name (as vested) and mailing address, as on SEG's ownership table. Address from chain['owner_addresses']
+    (name -> address) or, for a sole owner, the appraisal district mailing address."""
+    full = owner_full_name(name, vesting)
+    addr = (chain.get("owner_addresses") or {}).get(name)
+    if not addr and len(chain.get("current_owner") or []) == 1:
+        tx = chain.get("tax") or {}
+        addr = tx.get("cad_mailing_address") or tx.get("notice_address")
+    addr = format_address(addr)
+    if addr and re.search(r",\s*an?\s", full):
+        full = full.replace(", a ", ",\na ", 1).replace(", an ", ",\nan ", 1)
+    return f"{full}\n{addr}" if addr else full
+
+
+def _long_date(iso) -> str | None:
+    d = as_date(iso)
+    return f"{d:%B} {d.day}, {d.year}" if d else None
+
+
+def tied_legal(land, acres, vesting, county) -> str:
+    """Property description tied to the vesting deed, SEG style: '642.3 acres, more or less, of <land>, being
+    more particularly described in that certain Special Warranty Deed dated ..., recorded in Volume 346, Page 115,
+    of the Official Public Records of ... County, Texas, to which reference is made for a more complete description.'"""
+    land = re.sub(r"\s+", " ", (land or "").strip()).rstrip(".;, ")
+    if not vesting:
+        return land
+    if "more particularly described" in land.lower():
+        return land
+    if acres and not re.search(r"\bacres?\b", land, re.I):
+        land = re.sub(r"^all of\s+", "", land, flags=re.I)
+        land = f"{acres:g} acres, more or less, of {land}"
+    key = norm_ref(vesting.get("instrument_id"))
+    m = re.fullmatch(r"V(\d+)P(\d+)", key)
+    where = (f"in Volume {m.group(1)}, Page {m.group(2)}" if m
+             else f"under Instrument No. {vesting.get('instrument_no') or display_ref(vesting)}")
+    rec = RECORD_NAMES.get(record_type(vesting), "Official Public Records")
+    cty = (vesting.get("county") or county or "").replace(" County", "").strip()
+    dated, filed = _long_date(vesting.get("execution_date")), _long_date(vesting.get("filing_date"))
+    gtor, gtee = vesting.get("grantors") or [], vesting.get("grantees") or []
+    kind = (vesting.get("type") or "deed").title()
+    parts = [f"that certain {kind}"]
+    if dated or filed:
+        parts.append(f"dated {dated}," if dated else f"filed {filed},")
+    if gtor:
+        parts.append(f"from {names(gtor)}, as Grantor{'s' if len(gtor) > 1 else ''},")
+    if gtee:
+        parts.append(f"to {names(gtee)}, as Grantee{'s' if len(gtee) > 1 else ''},")
+    parts.append(f"recorded {where}, of the {rec}" + (f" of {cty} County, Texas" if cty else ""))
+    text = " ".join(parts)
+    return f"{land}, being more particularly described in {text}, to which reference is made for a more complete description."
+
+
 def abstractor_note(inst) -> str:
     """Short note in the style of the SEG runsheet: what it conveys, what it reserves."""
     parts = []
@@ -207,8 +290,11 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     vesting = next((i for i in instruments if i["instrument_id"] == chain.get("vesting_instrument")), None)
     dated = [i["filing_date"] for i in instruments if i["filing_date"]]
     r_from, r_to = researched or (min(dated) if dated else None, max(dated) if dated else None)
+    certified = getattr(intake, "certified_through", None)
+    if certified:            # title end date = the date the county's records are certified through
+        r_to = certified
     client = (intake.tract_id or "").split(".")[0].upper()
-    legal = intake.legal_description or (vesting or {}).get("legal") or ""
+    legal = tied_legal(intake.legal_description or (vesting or {}).get("legal") or "", acres, vesting, intake.county)
 
     # ---- Ownership ----------------------------------------------------------------------------
     ws = wb["Ownership "]
@@ -224,14 +310,18 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     ws["E16"] = acres
     ws["C17"], ws["E17"] = as_date(r_from), as_date(r_to)
     ws["B22"] = legal
+    ws["B22"].alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
+    ws.row_dimensions[22].height = max(ws.row_dimensions[22].height or 15, 13 * (1 + len(legal) // 95) + 6)
     ps = chain.get("pore_space") or {"owners": owners, "vesting_instrument": chain.get("vesting_instrument")}
     ps_vesting = next((i for i in instruments if i["instrument_id"] == ps.get("vesting_instrument")), None)
     for row, who, deed in ((28, owners, vesting), (35, ps.get("owners") or [], ps_vesting)):
-        ws[f"B{row}"] = "\n".join(who) if who else "OWNER NOT DETERMINED"
+        ws[f"B{row}"] = "\n\n".join(owner_block(o, deed or vesting, chain) for o in who) if who else "OWNER NOT DETERMINED"
         ws[f"C{row}"] = display_ref(deed) if deed else None
         ws[f"D{row}"] = 1 if who else 0
         ws[f"E{row}"] = acres
         ws[f"B{row}"].alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
+        ws.row_dimensions[row].height = max(ws.row_dimensions[row].height or 15,
+                                            13 * (str(ws[f"B{row}"].value).count("\n") + 1) + 6)
     ws["B62"] = intake.records_searched or None
 
     # ---- Ownership BT Data --------------------------------------------------------------------

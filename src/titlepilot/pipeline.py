@@ -106,6 +106,7 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
     researched = None
     if listed.get("researched_from") and listed.get("researched_to"):
         researched = (norm_date(listed["researched_from"]), norm_date(listed["researched_to"]))
+    intake.certified_through = norm_date(intake.certified_through or listed.get("certified_through")) or None
     acres_sources = [(str(tract_list), acres_in(f"{listed.get('acreage')} acres") if listed.get("acreage") else None),
                      ("intake form", acres_in(intake.legal_description)), ("tract runsheet", runsheet_acres)]
     acres_source = next(((src, a) for src, a in acres_sources if a), (None, None))
