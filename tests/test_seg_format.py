@@ -106,3 +106,24 @@ def test_score_against_seg_cot(sample_run, tmp_path):
     assert any("2005" in o["ref"] for o in res["not_on_seg"])      # the pipeline easement isn't on the COT
     md = to_markdown(res)
     assert "found: 2 of 3" in md and "Cause No. 99" in md
+
+
+def test_names_examined_has_from_and_to_for_every_name(sample_run):
+    ws = openpyxl.load_workbook(sample_run["report"])["Names Examined"]
+    rows = [r for r in ws.iter_rows(min_row=5, values_only=True) if r[1]]
+    assert rows and all(r[2] and r[3] for r in rows), rows
+
+
+@pytest.mark.parametrize("a, b, same", [
+    ("Kay Wrage Gunn", "Kay Lee Wrage Gunn", True),
+    ("John Bridge Gunn, Jr.", "John B. Gunn, Jr.", True),
+    ("John B. Gunn", "John B. Gunn, Jr.", False),
+    ("Gunn, Robert Niels", "Robert Niels Gunn", True),
+    ("Mallard Land Development, LLC, a Texas limited liability company", "Mallard Land Development, LLC", True),
+    ("Perry R. Horton, Co-Trustee", "Perry R. Horton, Trustee", True),
+    ("Francis Shannon", "Frances Shannon", True),
+    ("Lee Gunn", "Kay Gunn", False),
+])
+def test_names_examined_merges_name_variants(a, b, same):
+    from titlepilot.report import _same_person
+    assert _same_person(a, b) is same
