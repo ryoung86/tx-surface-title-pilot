@@ -23,6 +23,7 @@ LABELS = {
     "county": "county",
     "legal description": "legal_description",
     "search period": "search_period",
+    "records certified through": "certified_through",
     "owners searched by name": "owners",
     "records searched": "records_searched",
     "title agent": "agent",
@@ -64,6 +65,7 @@ class Intake:
     county: str | None = None
     legal_description: str | None = None
     search_period: str | None = None
+    certified_through: str | None = None      # title end date: county records certified through (ISO once loaded)
     owners: list = field(default_factory=list)
     records_searched: str | None = None
     agent: str | None = None

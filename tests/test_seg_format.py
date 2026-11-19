@@ -1,0 +1,108 @@
+"""SEG report format details (owner address, legal tied to the vesting deed, title end date) and scoring
+against SEG's finished COT workbook."""
+import openpyxl
+import pytest
+
+from titlepilot.config import load_config
+from titlepilot.db import DB
+from titlepilot.pipeline import run_tract
+from titlepilot.report import format_address, owner_block, tied_legal
+from titlepilot.sample import TRACT, make_sample_tract
+from titlepilot.score_seg import compare, to_markdown
+
+from pathlib import Path
+
+CONFIG = Path(__file__).resolve().parents[1] / "config"
+
+VESTING = {"instrument_id": "Vol. 346, Page 115", "type": "special warranty deed", "file_name": "OPR_346_115.pdf",
+           "execution_date": "2017-04-12", "filing_date": "2017-04-21",
+           "grantors": ["PJK Family Limited Partnership"],
+           "grantees": ["Mallard Land Development, LLC, a Texas limited liability company"],
+           "legal": "Section 21, Block 36, Township 3 South, T&P Ry. Co. Survey, Abstract No. 401, Glasscock County, Texas"}
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("PO BOX 52267 MIDLAND TX 79710", "P.O. Box 52267\nMidland, Texas 79710"),
+    ("PO BOX 52267 MIDLAND TX 79710 (from CAD)", "P.O. Box 52267\nMidland, Texas 79710"),
+    ("500 W TEXAS AVE STE 1200 MIDLAND TX 79701-4203", "500 W Texas Ave Ste 1200\nMidland, Texas 79701-4203"),
+    ("somewhere odd", "somewhere odd"),
+])
+def test_format_address(raw, expected):
+    assert format_address(raw) == expected
+
+
+def test_owner_block_uses_vesting_name_and_cad_address():
+    chain = {"current_owner": ["Mallard Land Development, LLC"], "tax": {"cad_mailing_address": "PO BOX 52267 MIDLAND TX 79710"}}
+    assert owner_block("Mallard Land Development, LLC", VESTING, chain) == (
+        "Mallard Land Development, LLC,\na Texas limited liability company\nP.O. Box 52267\nMidland, Texas 79710")
+    two = {"current_owner": ["A", "B"], "tax": {"cad_mailing_address": "PO BOX 1 MIDLAND TX 79710"}}
+    assert owner_block("A", None, two) == "A"          # CAD address isn't assigned when there are several owners
+
+
+def test_legal_description_tied_to_vesting_deed():
+    text = tied_legal(VESTING["legal"], 642.3, VESTING, "Glasscock County")
+    assert text.startswith("642.3 acres, more or less, of Section 21, Block 36")
+    assert ("being more particularly described in that certain Special Warranty Deed dated April 12, 2017, from PJK "
+            "Family Limited Partnership, as Grantor, to Mallard Land Development, LLC, a Texas limited liability company, "
+            "as Grantee, recorded in Volume 346, Page 115, of the Official Public Records of Glasscock County, Texas") in text
+    already = "642.3 acres, being more particularly described in that certain deed"
+    assert tied_legal(already, 642.3, VESTING, "Glasscock") == already
+    assert tied_legal("All of Section 21", None, None, None) == "All of Section 21"
+
+
+@pytest.fixture
+def sample_run(tmp_path):
+    folder = make_sample_tract(tmp_path / "data")
+    (folder / "tracts.csv").write_text(f"tract_id,acreage,certified_through\n{TRACT},160,02/07/2023\n")
+    res = run_tract(folder / TRACT, load_config(CONFIG), DB(tmp_path / "runs.sqlite"), tmp_path / "out", mock=True,
+                    log=lambda *_: None)
+    return res
+
+
+def test_report_end_date_is_certification_date(sample_run):
+    own = openpyxl.load_workbook(sample_run["report"])["Ownership "]
+    assert own["E17"].value.date().isoformat() == "2023-02-07"
+    assert "under Instrument No. 1994003300, of the Official Public Records" in own["B22"].value
+
+
+def _seg_workbook(path, rows, owner="Smith Ranch LLC\nP.O. Box 1\nSample, Texas 79000", end="2023-02-07"):
+    from datetime import date
+    wb = openpyxl.Workbook()
+    sor = wb.active
+    sor.title = "SOR"
+    sor["H5"], sor["I5"] = "Gross Acres:", 160
+    sor["A8"], sor["A9"] = "LEGAL DESCRIPTION", "160 acres ... recorded under Instrument No. 1994003300 ..."
+    for c, v in zip("ACDEH", ["Surface Ownership", "Fractional Interest", "Decimal Interest", "Net\nAcres", "Property ID"]):
+        sor[f"{c}12"] = v
+    sor["A13"], sor["C13"], sor["D13"], sor["E13"], sor["H13"] = owner, 1, 1, 160, 4242
+    sor["A14"] = "TOTAL:"
+    sor["E23"], sor["G23"] = "Title Start Date:", date(1978, 4, 12)
+    sor["E24"], sor["G24"] = "Title End Date:", date.fromisoformat(end)
+    cot = wb.create_sheet("SURFACE-COT")
+    for c, v in zip("ABCDEFG", ["NO.", "VOL/ PAGE", "TYPE", "DATE", "DATE FILED", "GRANTOR", "GRANTEE"]):
+        cot[f"{c}4"] = v
+    for n, r in enumerate(rows, 6):
+        for c, v in zip("ABCDEFG", r):
+            cot[f"{c}{n}"] = v
+    wb.save(path)
+    return path
+
+
+def test_score_against_seg_cot(sample_run, tmp_path):
+    from datetime import date
+    seg = _seg_workbook(tmp_path / "seg.xlsx", [
+        [1, "1978001001", "Warranty Deed", None, date(1978, 4, 12), "Mary Doe", "John A. Smith"],
+        [2, "1994003300", "Warranty Deed", None, date(1994, 8, 15), "John A. Smith", "Smith Ranch LLC"],
+        [3, "Cause No. 99", "Probate", "1/1/1990\nDate of Death", None, "Estate of Nobody", "The Public"],
+    ])
+    res = compare(sample_run["report"], seg)
+    sm = res["summary"]
+    assert (sm["seg_instruments"], sm["found"], sm["missed"]) == (3, 2, 1)
+    assert sm["dates_agree"] == 2
+    checks = {c["item"]: c["match"] for c in res["checks"]}
+    assert checks["Current surface owner(s)"] and checks["Gross acres"] and checks["Vesting deed"]
+    assert checks["Title end date"] and checks["Legal description ties to vesting deed"]
+    assert not checks["Owner address"]                     # sample tract has no CAD printout
+    assert any("2005" in o["ref"] for o in res["not_on_seg"])      # the pipeline easement isn't on the COT
+    md = to_markdown(res)
+    assert "found: 2 of 3" in md and "Cause No. 99" in md
