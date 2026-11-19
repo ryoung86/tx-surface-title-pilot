@@ -127,3 +127,57 @@ def test_names_examined_has_from_and_to_for_every_name(sample_run):
 def test_names_examined_merges_name_variants(a, b, same):
     from titlepilot.report import _same_person
     assert _same_person(a, b) is same
+
+
+def _docx(path, rows):
+    import zipfile
+    cell = lambda t: f'<w:tc><w:p><w:r><w:t>{t}</w:t></w:r></w:p></w:tc>'
+    body = "".join("<w:tr>" + "".join(cell(c) for c in r) + "</w:tr>" for r in rows)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/'
+           f'wordprocessingml/2006/main"><w:body><w:tbl>{body}</w:tbl></w:body></w:document>')
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("word/document.xml", xml)
+    return path
+
+
+def test_read_name_checklist_docx(tmp_path):
+    from titlepilot.names_checklist import find_name_checklist, read_name_checklist
+    hdr = ["Names Researched (Last Name First)", "From", "Through", "Grantor", "Probate", "Defendant"]
+    _docx(tmp_path / "SEGI Name Checklist.docx", [hdr, ["Chesser, D. A.", "11/22/1906", "4/10/1937", "X", "", ""],
+                                                  hdr, ["Parrish, Joe", "1918", "2/15/1937", "X", "X", ""],
+                                                  ["", "", "", "", "", ""]])
+    path = find_name_checklist(tmp_path)
+    assert path.name == "SEGI Name Checklist.docx"
+    rows = read_name_checklist(path)
+    assert rows == [{"name": "Chesser, D. A.", "from": "1906-11-22", "to": "1937-04-10", "indices": {"VENDOR"}},
+                    {"name": "Parrish, Joe", "from": "1918", "to": "1937-02-15", "indices": {"VENDOR", "PROBATES"}}]
+
+
+def test_names_examined_marks_indices_from_checklist(tmp_path):
+    folder = make_sample_tract(tmp_path / "data")
+    (folder / TRACT / "Names Checklist.csv").write_text(
+        "Name,From,Through,Grantor,Grantee,Deed of Trust,Probate,Defendant,UCC\n"
+        "\"Smith, John A.\",4/12/1978,8/15/1994,X,X,X,,X,\n"
+        "Smith Ranch LLC,8/15/1994,2/7/2023,X,X,X,X,X,X\n")
+    res = run_tract(folder / TRACT, load_config(CONFIG), DB(tmp_path / "runs.sqlite"), tmp_path / "out", mock=True,
+                    log=lambda *_: None)
+    ws = openpyxl.load_workbook(res["report"])["Names Examined"]
+    header = [ws.cell(3, c).value for c in range(2, 14)]
+    rows = {r[1]: dict(zip(header, r[1:13])) for r in ws.iter_rows(min_row=5, values_only=True) if r[1]}
+    john = next(v for k, v in rows.items() if "John A. Smith" in k)
+    assert [john[k] for k in ("VENDOR", "VENDEE", "MORTGAGES", "CIVIL SUITS", "PROBATES", "UCC")] == ["X", "X", "X", "X", None, None]
+    assert john["TO"].date().isoformat() == "1994-08-15"
+    ranch = rows["Smith Ranch LLC"]
+    assert all(ranch[k] == "X" for k in ("VENDOR", "VENDEE", "MORTGAGES", "CIVIL SUITS", "PROBATES", "UCC"))
+    mary = next(v for k, v in rows.items() if "Mary Doe" in k)       # not on the checklist: no index marks
+    assert not any(mary[k] for k in ("VENDOR", "VENDEE", "PROBATES"))
+
+
+def test_tract_wide_indices_when_no_checklist(tmp_path):
+    folder = make_sample_tract(tmp_path / "data")
+    (folder / "tracts.csv").write_text(f"tract_id,acreage,indices_examined\n{TRACT},160,vendor; vendee; probates\n")
+    res = run_tract(folder / TRACT, load_config(CONFIG), DB(tmp_path / "runs.sqlite"), tmp_path / "out", mock=True,
+                    log=lambda *_: None)
+    ws = openpyxl.load_workbook(res["report"])["Names Examined"]
+    rows = [r for r in ws.iter_rows(min_row=5, values_only=True) if r[1]]
+    assert rows and all(r[4] == "X" and r[5] == "X" and r[8] == "X" and r[6] is None for r in rows)

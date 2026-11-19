@@ -487,12 +487,24 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
     # ---- Names Examined -----------------------------------------------------------------------
     ws = wb["Names Examined"]
     periods = _owner_periods(chain, r_from, r_to)
-    rows = []
-    for name, (start, end) in periods.items():
-        rows.append([name, as_date(start), as_date(end) or as_date(r_to)] + [None] * 9)
+    from .names_checklist import INDEX_NAMES, parse_indices
+    checklist = list(getattr(intake, "names_examined", None) or [])
+    default_idx = parse_indices(getattr(intake, "indices_examined", None))
+    entries = [{"name": n, "from": a, "to": b or r_to, "indices": set(default_idx) if not checklist else set()}
+               for n, (a, b) in periods.items()]
+    for c in checklist:          # the agent's checklist: the period and indices actually searched
+        e = next((e for e in entries if _same_person(c["name"], e["name"])), None)
+        if e is None:
+            entries.append(e := {"name": c["name"], "from": None, "to": None, "indices": set()})
+        e["from"], e["to"] = c.get("from") or e["from"], c.get("to") or e["to"]
+        e["indices"] |= c.get("indices") or set()
     for name in (intake.owners or []):    # names the agent searched that aren't in the chain: the search period
-        if not any(_same_person(name, r[0]) for r in rows):
-            rows.append([name, as_date(r_from), as_date(r_to)] + [None] * 9)
+        if not any(_same_person(name, e["name"]) for e in entries):
+            entries.append({"name": name, "from": r_from, "to": r_to, "indices": set(default_idx)})
+    cell_date = lambda v: as_date(v) or v
+    rows = [[e["name"], cell_date(e["from"]), cell_date(e["to"])] + ["X" if col in e["indices"] else None
+                                                                    for col in INDEX_NAMES]
+            for e in entries]
     _write_rows(ws, 5, 2, 13, rows)
 
     # ---- Index to All Documents and Runsheet ---------------------------------------------------

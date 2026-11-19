@@ -9,6 +9,7 @@ from .chain import build_chain
 from .extract import DEFAULT_MODEL, Extractor
 from .export import export_review
 from .report import write_report
+from .names_checklist import find_name_checklist, read_name_checklist
 from .intake import acres_in, check_package, find_tract_list, load_package, load_tract_list
 from .mapping import mapping_items, send_notifications, update_queue
 from .pages import to_pages
@@ -107,6 +108,14 @@ def run_tract(folder, cfg, db, out_dir="output", mock=False, model=DEFAULT_MODEL
     if listed.get("researched_from") and listed.get("researched_to"):
         researched = (norm_date(listed["researched_from"]), norm_date(listed["researched_to"]))
     intake.certified_through = norm_date(intake.certified_through or listed.get("certified_through")) or None
+    intake.indices_examined = intake.indices_examined or listed.get("indices_examined") or None
+    checklist = find_name_checklist(folder)
+    if checklist:
+        try:
+            intake.names_examined = read_name_checklist(checklist)
+            log(f"  Names checklist: {checklist.name} ({len(intake.names_examined)} names)")
+        except Exception as e:      # a checklist that can't be read shouldn't stop the run
+            log(f"  Names checklist {checklist.name} could not be read: {e}")
     acres_sources = [(str(tract_list), acres_in(f"{listed.get('acreage')} acres") if listed.get("acreage") else None),
                      ("intake form", acres_in(intake.legal_description)), ("tract runsheet", runsheet_acres)]
     acres_source = next(((src, a) for src, a in acres_sources if a), (None, None))
