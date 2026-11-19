@@ -251,22 +251,92 @@ def _write_rows(ws, first_row, c1, c2, rows):
     return first_row + len(rows) - 1 if rows else first_row
 
 
-def _owner_periods(chain):
-    """When each owner in the chain took and parted with title (for Names Examined).
-    Out-sales and undivided-interest deeds don't end a period; current owners run to the end."""
+_CAPACITY = re.compile(r"\(.*?\)|,\s*an?\s+[a-z]+\s+(?:limited|general|corporation|company|nonprofit)\b.*$|"
+                       r",?\s*\b(?:co-?trustees?|trustees?|independent executor|executor|executrix|"
+                       r"administrator\b.*|guardian\b.*|a/k/a\b.*|deceased|dec'd)\b\.?", re.I)
+_SUFFIX = {"jr", "sr", "ii", "iii", "iv"}
+
+
+def _name_key(n: str) -> str:
+    """Matching key for a person or entity: no capacity words, 'Last, First' turned round, no punctuation."""
+    n = _CAPACITY.sub(" ", n or "")
+    n = re.sub(r"^(?:the\s+)?estate of\s+", "", n.strip(), flags=re.I)
+    m = re.fullmatch(r"\s*([A-Za-z'\-]+),\s*([^,]+?)\s*", n)
+    if m and not re.search(r"\b(llc|inc|ltd|lp|co|company|corp)\b", n, re.I):
+        n = f"{m.group(2)} {m.group(1)}"
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", n.lower()).split())
+
+
+def _same_person(a: str, b: str) -> bool:
+    """Same name allowing a missing middle name ('Kay Wrage Gunn' / 'Kay Lee Wrage Gunn'); Jr./Sr. must agree."""
+    ka, kb = _name_key(a), _name_key(b)
+    if not ka or not kb:
+        return False
+    if ka == kb:
+        return True
+    ta, tb = ka.split(), kb.split()
+    sa, sb = {t for t in ta if t in _SUFFIX}, {t for t in tb if t in _SUFFIX}
+    if sa != sb:
+        return False
+    ta, tb = [t for t in ta if t not in _SUFFIX], [t for t in tb if t not in _SUFFIX]
+    if len(ta) >= 2 and len(tb) >= 2 and ta[0] == tb[0] and ta[-1] == tb[-1]:
+        short, long_ = sorted((ta[1:-1], tb[1:-1]), key=len)
+        # middle names may be missing or initials: 'John B. Gunn' / 'John Bridge Gunn'
+        if all(any(m == x or (len(m) == 1 and x.startswith(m)) or (len(x) == 1 and m.startswith(x)) for x in long_)
+               for m in short):
+            return True
+    from .fuzzy import token_sort_ratio
+    return token_sort_ratio(ka, kb) >= 90
+
+
+def _owner_periods(chain, r_from=None, r_to=None):
+    """FROM and TO dates for every name in the chain (for Names Examined).
+
+    FROM: when the name took title (grantee of a conveyance, or named as heir/devisee in an affidavit,
+    probate or distribution). A name with no recorded acquisition (an heir, a joining spouse) held under the
+    owner of record at the time, so FROM is the filing of the last conveyance before the name first appears;
+    a name before any conveyance in the package gets the start of the search.
+    TO: the name's last conveyance as grantor. Current owners run to the end of the search. A name that never
+    conveyed (an owner who died) runs to the probate or affidavit dealing with the estate, else to the next
+    conveyance by others."""
     from .chain import is_fractional, is_partial_area
+    instruments = sorted((i for i in chain.get("instruments") or chain["conveyances"] if i.get("filing_date")),
+                         key=lambda i: i["filing_date"])
+    convs = sorted((c for c in chain["conveyances"] if c.get("filing_date")), key=lambda c: c["filing_date"])
+    whole = [c for c in convs if not is_fractional(c) and not is_partial_area(c, chain.get("subject_acres"))]
+    estate_docs = [i for i in instruments if re.search(r"probate|affidavit|heirship|distribution|guardian|will\b",
+                                                       i.get("type") or "", re.I)]
+    fiduciary = re.compile(r"administrat|executor|executrix|guardian|trustee", re.I)
+    names = []
+    for n in chain.get("owners") or [x for c in convs for x in (c.get("grantors") or []) + (c.get("grantees") or [])]:
+        if n and not any(_same_person(n, m) for m in names):
+            names.append(n)
+    involved = lambda n, i: any(_same_person(n, x) for x in (i.get("grantors") or []) + (i.get("grantees") or []))
+    current = chain.get("current_owner") or []
     periods = {}
-    for c in chain["conveyances"]:
-        for g in c["grantees"]:
-            periods.setdefault(g, [c["filing_date"], None])
-        if is_fractional(c) or is_partial_area(c, chain.get("subject_acres")):
-            continue
-        for g in c["grantors"]:
-            p = periods.setdefault(g, [None, None])
-            p[1] = c["filing_date"]
-    for o in chain["current_owner"]:
-        if o in periods:
-            periods[o][1] = None
+    for n in names:
+        took = [c["filing_date"] for c in convs if any(_same_person(n, g) for g in c.get("grantees") or [])]
+        took += [d["filing_date"] for d in estate_docs if any(_same_person(n, g) for g in d.get("grantees") or [])]
+        gave = [c["filing_date"] for c in convs if any(_same_person(n, g) for g in c.get("grantors") or [])]
+        first_seen = min((i["filing_date"] for i in instruments if involved(n, i)), default=None)
+        start = min(took) if took else None
+        if start is None and first_seen:
+            # no recorded acquisition: a fiduciary from the estate paper before it acts; an heir or joining
+            # spouse from the last conveyance of the whole tract before the name appears
+            pool = estate_docs if fiduciary.search(n) else whole
+            before = [c["filing_date"] for c in pool if c["filing_date"] < first_seen]
+            start = max(before) if before else r_from
+        if any(_same_person(n, o) for o in current):
+            end = None            # filled with the end of the search
+        elif gave:
+            end = max(gave)
+        else:
+            later = [d["filing_date"] for d in estate_docs if start and d["filing_date"] >= start and
+                     any(_same_person(n, x) or _name_key(n) in _name_key(" ".join(d.get("grantors") or []) + " " + (d.get("type") or ""))
+                         for x in (d.get("grantors") or []))]
+            nxt = [c["filing_date"] for c in convs if start and c["filing_date"] > start and not involved(n, c)]
+            end = min(later) if later else (min(nxt) if nxt else None)
+        periods[n] = [start or r_from, end]
     return periods
 
 
@@ -416,15 +486,13 @@ def write_report(path, intake, chain, flags, skipped, problems, run_id, research
 
     # ---- Names Examined -----------------------------------------------------------------------
     ws = wb["Names Examined"]
-    periods = _owner_periods(chain)
-    searched = [n for n in (intake.owners or [])]
+    periods = _owner_periods(chain, r_from, r_to)
     rows = []
-    for name in chain["owners"]:
-        start, end = periods.get(name, [None, None])
+    for name, (start, end) in periods.items():
         rows.append([name, as_date(start), as_date(end) or as_date(r_to)] + [None] * 9)
-    for name in searched:
-        if not any(name.lower() == r[0].lower() for r in rows):
-            rows.append([name, None, None] + [None] * 9)
+    for name in (intake.owners or []):    # names the agent searched that aren't in the chain: the search period
+        if not any(_same_person(name, r[0]) for r in rows):
+            rows.append([name, as_date(r_from), as_date(r_to)] + [None] * 9)
     _write_rows(ws, 5, 2, 13, rows)
 
     # ---- Index to All Documents and Runsheet ---------------------------------------------------
